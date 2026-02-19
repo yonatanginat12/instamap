@@ -56,12 +56,13 @@
     #searchBtn:hover { opacity: .88; }
     #searchBtn:disabled { opacity: .5; cursor: not-allowed; }
     #locateBtn {
-      padding: .65rem .85rem; background: var(--surface); color: var(--accent);
-      border: 1.5px solid var(--border); border-radius: 10px; font-size: 1.1rem;
-      cursor: pointer; transition: background .15s, border-color .15s; line-height: 1;
+      background: none; border: none; color: var(--accent);
+      font-size: .85rem; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; gap: .3rem;
+      margin-top: .6rem; opacity: .85; transition: opacity .15s;
     }
-    #locateBtn:hover { background: var(--accent-light); border-color: var(--accent); }
-    #locateBtn:disabled { opacity: .5; cursor: not-allowed; }
+    #locateBtn:hover { opacity: 1; text-decoration: underline; }
+    #locateBtn:disabled { opacity: .4; cursor: not-allowed; text-decoration: none; }
 
     /* ── View toggle ── */
     .view-toggle {
@@ -223,9 +224,9 @@
   <p>Explore Instagram posts &amp; places for any location</p>
   <form id="searchForm">
     <input id="location" type="text" placeholder="e.g. Tel Aviv, Paris, New York…" autocomplete="off" required />
-    <button id="locateBtn" type="button" title="Use my current location">📍</button>
     <button id="searchBtn" type="submit">Search</button>
   </form>
+  <button id="locateBtn" type="button">📍 Use my current location</button>
   <div class="view-toggle" id="viewToggle" hidden>
     <button class="vbtn active" id="btnGrid" onclick="setView('grid')">⊞ Grid</button>
     <button class="vbtn"        id="btnMap"  onclick="setView('map')">🗺 Map</button>
