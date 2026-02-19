@@ -333,6 +333,7 @@
       // Without this, L.map() reads a 0×0 size and tiles never render.
       setTimeout(() => initMap(_lastData), 50);
     }
+
   }
 
   /* ── Show more / less ── */
@@ -435,7 +436,19 @@
     </div>`;
   }
 
-  function initMap(data) {
+  async function geocodeLocation(location) {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const json = await r.json();
+      if (json.length) return [parseFloat(json[0].lat), parseFloat(json[0].lon)];
+    } catch {}
+    return null;
+  }
+
+  async function initMap(data) {
     if (!data) return;
 
     // Remove previous markers
@@ -481,9 +494,11 @@
     _markers.forEach(m => m.addTo(_map));
 
     if (allPoints.length) {
-      _map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40] });
+      _map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40], maxZoom: 16 });
     } else {
-      _map.setView([0, 0], 2);
+      // No result coordinates — geocode the searched location and center there
+      const coords = await geocodeLocation(data.location);
+      _map.setView(coords ?? [0, 0], coords ? 13 : 2);
     }
 
     // Force Leaflet to recalculate the container size now that it's visible
