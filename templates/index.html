@@ -249,6 +249,7 @@
               <button class="show-more-btn" onclick="showMore('ig-restaurants')">Show more</button>
             </div>
           </div>
+          <!-- Yelp disabled — re-enable by uncommenting and restoring search_yelp in main.py
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-yelp">Yelp</span></div>
             <div class="cards" id="yelp-cards"></div>
@@ -256,6 +257,7 @@
               <button class="show-more-btn" onclick="showMore('yelp')">Show more</button>
             </div>
           </div>
+          -->
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
             <div class="cards" id="osm-restaurants-cards"></div>
@@ -536,8 +538,7 @@
 
   /* ── Render places (Yelp + OSM) — called immediately on phase 1 ── */
   function renderPlaces(data) {
-    fillCards('yelp-cards', 'yelp-more',
-      data.yelp_businesses.map(b => renderPlaceCard(b, true)));
+    // fillCards('yelp-cards', 'yelp-more', data.yelp_businesses.map(b => renderPlaceCard(b, true)));
     fillCards('osm-restaurants-cards', 'osm-restaurants-more',
       data.osm_restaurants.map(p => renderPlaceCard(p, false)));
     fillCards('osm-activities-cards', 'osm-activities-more',

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import math
 import time
 from pathlib import Path
 
@@ -13,7 +12,7 @@ load_dotenv()
 from .instagram import search_instagram  # noqa: E402
 from .models import InstagramPost, PlacesResponse, SearchResponse  # noqa: E402
 from .overpass import search_osm  # noqa: E402
-from .yelp import search_yelp  # noqa: E402
+# from .yelp import search_yelp  # noqa: E402  (disabled — re-enable when needed)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -55,33 +54,22 @@ async def search_places(
     if cached and time.time() - cached[0] < _CACHE_TTL:
         return cached[1]
 
-    (yelp_biz, yelp_warn), osm_result = await asyncio.gather(
-        _with_timeout(
-            search_yelp(location, category),
-            timeout=10.0,
-            default=([], ["Yelp: request timed out"]),
-        ),
-        _with_timeout(
-            search_osm(location, category),
-            timeout=22.0,
-            default=([], [], ["OSM: request timed out"], None),
-        ),
+    osm_result = await _with_timeout(
+        search_osm(location, category),
+        timeout=22.0,
+        default=([], [], ["OSM: request timed out"], None),
     )
     osm_restaurants, osm_activities, osm_warn, coords = osm_result
-
-    yelp_biz.sort(
-        key=lambda b: b.rating * math.log10(b.review_count + 1), reverse=True
-    )
 
     result = PlacesResponse(
         location=location,
         category=category,
         location_lat=coords[0] if coords else None,
         location_lon=coords[1] if coords else None,
-        yelp_businesses=yelp_biz,
+        yelp_businesses=[],
         osm_restaurants=osm_restaurants,
         osm_activities=osm_activities,
-        warnings=yelp_warn + osm_warn,
+        warnings=osm_warn,
     )
     _places_cache[key] = (time.time(), result)
     return result
