@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discover</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f5f7;
+      --surface: #ffffff;
+      --border: #e2e2e7;
+      --accent: #6441a5;
+      --accent-light: #ede9f8;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --radius: 14px;
+      --shadow: 0 2px 12px rgba(0,0,0,.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 2rem 1.5rem 1.25rem;
+      text-align: center;
+    }
+    header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -.5px; }
+    header p  { color: var(--muted); margin-top: .3rem; font-size: .95rem; }
+
+    #searchForm {
+      display: flex; flex-wrap: wrap; gap: .75rem;
+      justify-content: center; margin-top: 1.25rem;
+    }
+    #location {
+      flex: 1 1 280px; max-width: 420px;
+      padding: .65rem 1rem; border: 1.5px solid var(--border);
+      border-radius: 10px; font-size: 1rem; outline: none;
+      transition: border-color .2s;
+    }
+    #location:focus { border-color: var(--accent); }
+    #searchBtn {
+      padding: .65rem 1.6rem; background: var(--accent); color: #fff;
+      border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      cursor: pointer; transition: opacity .15s;
+    }
+    #searchBtn:hover { opacity: .88; }
+    #searchBtn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── View toggle ── */
+    .view-toggle {
+      display: flex; justify-content: center; gap: .5rem; margin-top: 1rem;
+    }
+    .vbtn {
+      padding: .4rem 1.1rem; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: .85rem; font-weight: 600;
+      cursor: pointer; background: var(--surface); color: var(--muted);
+      transition: all .15s;
+    }
+    .vbtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* ── Main ── */
+    main { max-width: 1300px; margin: 2rem auto; padding: 0 1.25rem 4rem; }
+
+    /* ── Two-column grid ── */
+    .results-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+    }
+    @media (max-width: 800px) { .results-grid { grid-template-columns: 1fr; } }
+
+    /* ── Map ── */
+    #mapView { display: none; }
+    #map {
+      height: 560px; border-radius: var(--radius);
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    /* legend */
+    #mapLegend {
+      display: flex; flex-wrap: wrap; gap: .6rem;
+      margin-top: .85rem; font-size: .82rem; font-weight: 500;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: .35rem;
+      background: var(--surface); padding: .3rem .7rem;
+      border-radius: 20px; box-shadow: var(--shadow);
+    }
+    .legend-dot {
+      width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* ── Section header ── */
+    .section-header {
+      display: flex; align-items: center; gap: .6rem;
+      margin-bottom: 1.25rem; padding-bottom: .75rem;
+      border-bottom: 2px solid var(--accent-light);
+    }
+    .section-header h2 { font-size: 1.2rem; font-weight: 700; }
+
+    /* ── Source block ── */
+    .source-block { margin-bottom: 1.75rem; }
+    .source-label {
+      display: flex; align-items: center; gap: .5rem;
+      font-size: .8rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted); margin-bottom: .6rem;
+    }
+    .source-pill {
+      font-size: .7rem; font-weight: 600; padding: .15rem .5rem; border-radius: 20px;
+    }
+    .pill-ig   { background: #fce8f3; color: #c2185b; }
+    .pill-yelp { background: #fff0f0; color: #c0392b; }
+    .pill-osm  { background: #edfdf4; color: #15803d; }
+
+    /* ── Cards ── */
+    .cards { display: grid; gap: .75rem; grid-template-columns: repeat(2,1fr); }
+    @media (max-width: 500px) { .cards { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface); border-radius: 12px;
+      box-shadow: var(--shadow); overflow: hidden;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.11); }
+
+    /* Instagram card */
+    .ig-img {
+      width: 100%; aspect-ratio: 1; object-fit: cover;
+      display: block; background: var(--border);
+    }
+    .ig-placeholder {
+      width: 100%; aspect-ratio: 1;
+      background: linear-gradient(135deg,#f3e9ff,#e9f0ff);
+      display: flex; align-items: center; justify-content: center; font-size: 2rem;
+    }
+    .ig-body { padding: .6rem .75rem; }
+    .ig-user { font-size: .78rem; font-weight: 600; color: var(--accent); margin-bottom: .25rem; }
+    .ig-caption {
+      font-size: .78rem; color: var(--muted); line-height: 1.4;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .ig-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .4rem .75rem; border-top: 1px solid var(--border);
+      font-size: .73rem; color: var(--muted);
+    }
+
+    /* Place card */
+    .place-card { padding: .85rem 1rem; }
+    .place-name { font-weight: 700; font-size: .9rem; margin-bottom: .25rem; }
+    .place-cats { font-size: .75rem; color: var(--accent); font-weight: 500; margin-bottom: .35rem; }
+    .stars { color: #f59e0b; }
+    .rating-row {
+      display: flex; align-items: center; gap: .35rem;
+      font-size: .78rem; color: var(--muted); margin-bottom: .3rem;
+    }
+    .price { color: #16a34a; font-weight: 600; }
+    .place-addr { font-size: .75rem; color: var(--muted); margin-top: .3rem; line-height: 1.35; }
+    .place-link {
+      display: inline-block; margin-top: .5rem;
+      font-size: .75rem; font-weight: 600; color: var(--accent); text-decoration: none;
+    }
+    .place-link:hover { text-decoration: underline; }
+
+    /* ── Show more ── */
+    .show-more-wrap { margin-top: .6rem; }
+    .show-more-btn {
+      background: none; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: .45rem 1rem; font-size: .82rem; font-weight: 600; color: var(--accent);
+      cursor: pointer; width: 100%; transition: background .15s;
+    }
+    .show-more-btn:hover { background: var(--accent-light); }
+    .hidden-card { display: none; }
+    .hidden-card.visible { display: block; }
+
+    /* ── Map popup ── */
+    .map-popup img { width: 120px; height: 120px; object-fit: cover; border-radius: 6px; display: block; margin-bottom: .4rem; }
+    .map-popup-name { font-weight: 700; font-size: .9rem; margin-bottom: .2rem; }
+    .map-popup-sub { font-size: .78rem; color: #555; margin-bottom: .3rem; }
+    .map-popup a { font-size: .78rem; color: var(--accent); font-weight: 600; text-decoration: none; }
+
+    /* ── Warnings / states ── */
+    #warnings {
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 10px; padding: .7rem 1rem;
+      font-size: .82rem; color: #92400e; margin-bottom: 1.25rem;
+    }
+    #warnings ul { padding-left: 1.2rem; }
+    #loading { text-align: center; padding: 4rem 1rem; color: var(--muted); }
+    .spinner {
+      width: 38px; height: 38px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .7s linear infinite; margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #error {
+      background: #fff0f0; border: 1px solid #fca5a5;
+      border-radius: 10px; padding: 1rem 1.25rem; color: #b91c1c; margin-top: 1.5rem;
+    }
+    .empty { text-align: center; padding: 1.5rem .5rem; color: var(--muted); font-size: .85rem; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Discover</h1>
+  <p>Explore Instagram posts &amp; places for any location</p>
+  <form id="searchForm">
+    <input id="location" type="text" placeholder="e.g. Tel Aviv, Paris, New York…" autocomplete="off" required />
+    <button id="searchBtn" type="submit">Search</button>
+  </form>
+  <div class="view-toggle" id="viewToggle" hidden>
+    <button class="vbtn active" id="btnGrid" onclick="setView('grid')">⊞ Grid</button>
+    <button class="vbtn"        id="btnMap"  onclick="setView('map')">🗺 Map</button>
+  </div>
+</header>
+
+<main>
+  <div id="loading" hidden>
+    <div class="spinner"></div>
+    <p>Searching Instagram and places…</p>
+  </div>
+  <div id="error" hidden></div>
+
+  <div id="results" hidden>
+    <div id="warnings" hidden></div>
+
+    <!-- ── Grid view ── -->
+    <div id="gridView">
+      <div class="results-grid">
+
+        <div id="col-restaurants">
+          <div class="section-header">
+            <span style="font-size:1.4rem">🍽️</span><h2>Restaurants</h2>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="cards" id="ig-restaurants-cards"></div>
+            <div class="show-more-wrap" id="ig-restaurants-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-restaurants')">Show more</button>
+            </div>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-yelp">Yelp</span></div>
+            <div class="cards" id="yelp-cards"></div>
+            <div class="show-more-wrap" id="yelp-more" hidden>
+              <button class="show-more-btn" onclick="showMore('yelp')">Show more</button>
+            </div>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
+            <div class="cards" id="osm-restaurants-cards"></div>
+            <div class="show-more-wrap" id="osm-restaurants-more" hidden>
+              <button class="show-more-btn" onclick="showMore('osm-restaurants')">Show more</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="col-activities">
+          <div class="section-header">
+            <span style="font-size:1.4rem">🗺️</span><h2>Things To Do</h2>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="cards" id="ig-activities-cards"></div>
+            <div class="show-more-wrap" id="ig-activities-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-activities')">Show more</button>
+            </div>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
+            <div class="cards" id="osm-activities-cards"></div>
+            <div class="show-more-wrap" id="osm-activities-more" hidden>
+              <button class="show-more-btn" onclick="showMore('osm-activities')">Show more</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- #gridView -->
+
+    <!-- ── Map view ── -->
+    <div id="mapView">
+      <div id="map"></div>
+      <div id="mapLegend">
+        <div class="legend-item"><div class="legend-dot" style="background:#c2185b"></div>Instagram · Restaurants</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#7b1fa2"></div>Instagram · Things To Do</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div>Yelp</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#2e7d32"></div>OSM · Restaurants</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1565c0"></div>OSM · Activities</div>
+      </div>
+      <div id="mapNoCoords" style="margin-top:2rem" hidden></div>
+    </div>
+
+  </div><!-- #results -->
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const PREVIEW = 4;
+  let _map = null;
+  let _markers = [];
+  let _lastData = null;
+
+  /* ── Utilities ── */
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function stars(r) {
+    return '★'.repeat(Math.floor(r)) + (r % 1 >= .5 ? '½' : '') +
+           '☆'.repeat(5 - Math.floor(r) - (r % 1 >= .5 ? 1 : 0));
+  }
+
+  /* ── View toggle ── */
+  function setView(v) {
+    document.getElementById('gridView').style.display = v === 'grid' ? 'block' : 'none';
+    document.getElementById('mapView').style.display  = v === 'map'  ? 'block' : 'none';
+    document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+    document.getElementById('btnMap').classList.toggle('active',  v === 'map');
+    if (v === 'map') {
+      // Defer until after the browser has laid out the now-visible container.
+      // Without this, L.map() reads a 0×0 size and tiles never render.
+      setTimeout(() => initMap(_lastData), 50);
+    }
+  }
+
+  /* ── Show more / less ── */
+  function showMore(key) {
+    const hidden   = document.querySelectorAll(`#${key}-cards .hidden-card`);
+    const btn      = document.querySelector(`#${key}-more .show-more-btn`);
+    const expanded = btn.dataset.expanded === '1';
+    hidden.forEach(el => el.classList.toggle('visible', !expanded));
+    btn.textContent      = expanded ? 'Show more' : 'Show less';
+    btn.dataset.expanded = expanded ? '0' : '1';
+  }
+
+  /* ── Card renderers ── */
+  function renderIgCard(p) {
+    const img = p.image_url
+      ? `<img class="ig-img" src="${esc(p.image_url)}" loading="lazy"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const ph = `<div class="ig-placeholder"${p.image_url ? ' style="display:none"' : ''}>📷</div>`;
+    return `
+      <a class="card" href="${esc(p.url)}" target="_blank" rel="noopener"
+         style="text-decoration:none;color:inherit">
+        ${img}${ph}
+        <div class="ig-body">
+          <div class="ig-user">@${esc(p.username)}</div>
+          ${p.caption ? `<div class="ig-caption">${esc(p.caption)}</div>` : ''}
+        </div>
+        <div class="ig-footer">
+          <span>❤️ ${p.likes.toLocaleString()}</span>
+          ${p.location_name ? `<span>📍 ${esc(p.location_name)}</span>` : ''}
+        </div>
+      </a>`;
+  }
+
+  function renderPlaceCard(p, isYelp) {
+    return `
+      <div class="card place-card">
+        <div class="place-name">${esc(p.name)}</div>
+        ${p.categories?.length ? `<div class="place-cats">${esc(p.categories.join(' · '))}</div>` : ''}
+        ${isYelp ? `<div class="rating-row">
+          <span class="stars">${stars(p.rating)}</span>
+          <span>${p.rating} (${p.review_count?.toLocaleString()})</span>
+          ${p.price ? `<span class="price">${esc(p.price)}</span>` : ''}
+        </div>` : ''}
+        ${p.address ? `<div class="place-addr">📍 ${esc(p.address)}</div>` : ''}
+        ${(p.url || p.link) ? `<a class="place-link"
+          href="${esc(p.url || p.link)}" target="_blank" rel="noopener">
+          View on ${isYelp ? 'Yelp' : 'OpenStreetMap'} →</a>` : ''}
+      </div>`;
+  }
+
+  function fillCards(containerId, moreId, htmlItems) {
+    const container = document.getElementById(containerId);
+    const moreWrap  = document.getElementById(moreId);
+    if (!htmlItems.length) {
+      container.innerHTML = '<div class="empty">No results</div>';
+      return;
+    }
+    container.innerHTML = htmlItems.map((html, i) =>
+      `<div class="${i >= PREVIEW ? 'hidden-card' : ''}">${html}</div>`
+    ).join('');
+    if (htmlItems.length > PREVIEW) {
+      moreWrap.hidden = false;
+      const rem = htmlItems.length - PREVIEW;
+      moreWrap.querySelector('button').textContent = `Show ${rem} more`;
+      moreWrap.querySelector('button').dataset.expanded = '0';
+    } else {
+      moreWrap.hidden = true;
+    }
+  }
+
+  /* ── Map ── */
+  function circleMarker(lat, lon, color, popupHtml) {
+    return L.circleMarker([lat, lon], {
+      radius: 8, color: '#fff', weight: 2,
+      fillColor: color, fillOpacity: 0.9,
+    }).bindPopup(popupHtml, { maxWidth: 220 });
+  }
+
+  function igPopup(p) {
+    return `<div class="map-popup">
+      ${p.image_url ? `<img src="${esc(p.image_url)}" onerror="this.style.display='none'">` : ''}
+      <div class="map-popup-name">@${esc(p.username)}</div>
+      <div class="map-popup-sub">❤️ ${p.likes.toLocaleString()}
+        ${p.location_name ? ' · 📍 ' + esc(p.location_name) : ''}</div>
+      ${p.caption ? `<div class="map-popup-sub" style="-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden">${esc(p.caption)}</div>` : ''}
+      <a href="${esc(p.url)}" target="_blank" rel="noopener">View on Instagram →</a>
+    </div>`;
+  }
+
+  function placePopup(p, isYelp) {
+    return `<div class="map-popup">
+      <div class="map-popup-name">${esc(p.name)}</div>
+      ${p.categories?.length ? `<div class="map-popup-sub">${esc(p.categories.join(' · '))}</div>` : ''}
+      ${isYelp ? `<div class="map-popup-sub">${stars(p.rating)} ${p.rating}
+        (${p.review_count?.toLocaleString()})${p.price ? ' · ' + esc(p.price) : ''}</div>` : ''}
+      ${p.address ? `<div class="map-popup-sub">📍 ${esc(p.address)}</div>` : ''}
+      ${(p.url || p.link) ? `<a href="${esc(p.url || p.link)}" target="_blank" rel="noopener">
+        View on ${isYelp ? 'Yelp' : 'OpenStreetMap'} →</a>` : ''}
+    </div>`;
+  }
+
+  function initMap(data) {
+    if (!data) return;
+
+    // Remove previous markers
+    _markers.forEach(m => m.remove());
+    _markers = [];
+
+    const allPoints = [];
+    const noCoordPosts  = [];  // items without coordinates → listed below map
+
+    function addMarker(lat, lon, color, popupHtml) {
+      const m = circleMarker(lat, lon, color, popupHtml);
+      _markers.push(m);
+      allPoints.push([lat, lon]);
+    }
+
+    data.instagram_posts.forEach(p => {
+      const color = p.post_category === 'restaurants' ? '#c2185b' : '#7b1fa2';
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, color, igPopup(p));
+      else noCoordPosts.push({ type: 'ig', item: p });
+    });
+    data.yelp_businesses.forEach(b => {
+      if (b.lat != null && b.lon != null) addMarker(b.lat, b.lon, '#c0392b', placePopup(b, true));
+      else noCoordPosts.push({ type: 'yelp', item: b });
+    });
+    data.osm_restaurants.forEach(p => {
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, '#2e7d32', placePopup(p, false));
+      else noCoordPosts.push({ type: 'osm', item: p });
+    });
+    data.osm_activities.forEach(p => {
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, '#1565c0', placePopup(p, false));
+      else noCoordPosts.push({ type: 'osm', item: p });
+    });
+
+    // Init map only once — container must be visible before this runs
+    if (!_map) {
+      _map = L.map('map', { preferCanvas: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      }).addTo(_map);
+    }
+
+    _markers.forEach(m => m.addTo(_map));
+
+    if (allPoints.length) {
+      _map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40] });
+    } else {
+      _map.setView([0, 0], 2);
+    }
+
+    // Force Leaflet to recalculate the container size now that it's visible
+    _map.invalidateSize();
+
+    // Render no-coordinates section below the map
+    renderNoCoords(noCoordPosts);
+  }
+
+  function renderNoCoords(items) {
+    const el = document.getElementById('mapNoCoords');
+    if (!items.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = `
+      <div style="font-size:.85rem;font-weight:700;color:var(--muted);
+                  text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem">
+        📍 No location data (${items.length})
+      </div>
+      <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+        ${items.map(({ type, item }) =>
+          type === 'ig'
+            ? renderIgCard(item)
+            : renderPlaceCard(item, type === 'yelp')
+        ).join('')}
+      </div>`;
+  }
+
+  /* ── Main render ── */
+  function render(data) {
+    _lastData = data;
+    const igFood       = data.instagram_posts.filter(p => p.post_category === 'restaurants');
+    const igActivities = data.instagram_posts.filter(p => p.post_category === 'things_to_do');
+
+    fillCards('ig-restaurants-cards', 'ig-restaurants-more', igFood.map(renderIgCard));
+    fillCards('yelp-cards', 'yelp-more',
+      data.yelp_businesses.map(b => renderPlaceCard(b, true)));
+    fillCards('osm-restaurants-cards', 'osm-restaurants-more',
+      data.osm_restaurants.map(p => renderPlaceCard(p, false)));
+    fillCards('ig-activities-cards', 'ig-activities-more', igActivities.map(renderIgCard));
+    fillCards('osm-activities-cards', 'osm-activities-more',
+      data.osm_activities.map(p => renderPlaceCard(p, false)));
+
+    const warnEl = document.getElementById('warnings');
+    if (data.warnings.length) {
+      warnEl.innerHTML = `<ul>${data.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`;
+      warnEl.hidden = false;
+    } else {
+      warnEl.hidden = true;
+    }
+
+    // Reset to grid view on new search
+    setView('grid');
+    document.getElementById('viewToggle').hidden = false;
+  }
+
+  /* ── Search ── */
+  document.getElementById('searchForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const location = document.getElementById('location').value.trim();
+    if (!location) return;
+
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = true; btn.textContent = 'Searching…';
+    document.getElementById('loading').hidden  = false;
+    document.getElementById('results').hidden  = true;
+    document.getElementById('error').hidden    = true;
+    document.getElementById('viewToggle').hidden = true;
+
+    // Reset map on new search
+    if (_map) { _markers.forEach(m => m.remove()); _markers = []; }
+
+    try {
+      const r = await fetch(
+        `/api/search?location=${encodeURIComponent(location)}&category=all`
+      );
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
+      render(await r.json());
+      document.getElementById('results').hidden = false;
+    } catch (err) {
+      const el = document.getElementById('error');
+      el.textContent = `Error: ${err.message}`;
+      el.hidden = false;
+    } finally {
+      document.getElementById('loading').hidden = true;
+      btn.disabled = false; btn.textContent = 'Search';
+    }
+  });
+</script>
+</body>
+</html>
