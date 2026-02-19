@@ -88,9 +88,31 @@
 
     /* ── Map ── */
     #mapView { display: none; }
+    #mapContainer {
+      display: flex; height: 600px;
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    #mapSidebar {
+      width: 280px; min-width: 220px; flex-shrink: 0;
+      overflow-y: auto; background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+    #mapSidebar::-webkit-scrollbar { width: 5px; }
+    #mapSidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .sidebar-item {
+      display: flex; align-items: flex-start; gap: .6rem;
+      padding: .75rem 1rem; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background .12s;
+    }
+    .sidebar-item:hover   { background: var(--accent-light); }
+    .sidebar-item.active  { background: var(--accent-light); border-left: 3px solid var(--accent); }
+    .sidebar-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: .1rem; }
+    .sidebar-name { font-size: .85rem; font-weight: 600; color: var(--text); line-height: 1.3; }
+    .sidebar-meta { font-size: .73rem; color: var(--muted); margin-top: .15rem; line-height: 1.3; }
     #map {
-      height: 560px; border-radius: var(--radius);
-      box-shadow: var(--shadow); overflow: hidden;
+      flex: 1; height: 100%; border-radius: 0;
     }
     /* legend */
     #mapLegend {
@@ -102,8 +124,10 @@
       background: var(--surface); padding: .3rem .7rem;
       border-radius: 20px; box-shadow: var(--shadow);
     }
-    .legend-dot {
-      width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0;
+    @media (max-width: 640px) {
+      #mapContainer { flex-direction: column; height: auto; }
+      #mapSidebar { width: 100%; height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+      #map { height: 420px; }
     }
 
     /* ── Section header ── */
@@ -321,7 +345,10 @@
 
     <!-- ── Map view ── -->
     <div id="mapView">
-      <div id="map"></div>
+      <div id="mapContainer">
+        <div id="mapSidebar"><div id="sidebarList"></div></div>
+        <div id="map"></div>
+      </div>
       <div id="mapLegend">
         <div class="legend-item"><span>🍽️</span> Eat</div>
         <div class="legend-item"><span>🎭</span> Do</div>
@@ -338,7 +365,9 @@
 <script>
   const PREVIEW = 4;
   let _map = null;
-  let _markers = [];
+  let _markers = [];        // Leaflet marker objects
+  let _markerItems = [];    // { marker, el } for sidebar↔map linking
+  let _activeIdx = -1;
   let _lastData = null;
 
   /* ── Utilities ── */
@@ -363,7 +392,6 @@
       // Without this, L.map() reads a 0×0 size and tiles never render.
       setTimeout(() => initMap(_lastData), 50);
     }
-
   }
 
   /* ── Show more / less ── */
@@ -490,37 +518,59 @@
     return null;
   }
 
+  function focusMarker(idx) {
+    if (_activeIdx >= 0 && _markerItems[_activeIdx])
+      _markerItems[_activeIdx].el.classList.remove('active');
+    _activeIdx = idx;
+    const { marker, el } = _markerItems[idx];
+    el.classList.add('active');
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const ll = marker.getLatLng();
+    _map.setView(ll, Math.max(_map.getZoom(), 15), { animate: true });
+    marker.openPopup();
+  }
+
   async function initMap(data) {
     if (!data) return;
 
     // Remove previous markers
     _markers.forEach(m => m.remove());
     _markers = [];
+    _markerItems = [];
+    _activeIdx = -1;
 
-    const allPoints = [];
-    const noCoordPosts  = [];  // items without coordinates → listed below map
+    const allPoints   = [];
+    const noCoordPosts = [];
+    const sidebarRows  = [];   // { category, name, meta } for sidebar
 
-    function addMarker(lat, lon, category, popupHtml) {
+    function addMarker(lat, lon, category, popupHtml, name, meta) {
       const m = iconMarker(lat, lon, category, popupHtml);
+      const idx = _markers.length;
       _markers.push(m);
       allPoints.push([lat, lon]);
+      sidebarRows.push({ category, name, meta, idx });
     }
 
     data.instagram_posts.forEach(p => {
       const cat = ['eat','do','sleep'].includes(p.post_category) ? p.post_category : 'ig';
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, cat, igPopup(p));
-      else noCoordPosts.push({ type: 'ig', item: p });
+      if (p.lat != null && p.lon != null) {
+        const meta = [p.location_name, `❤️ ${p.likes.toLocaleString()}`].filter(Boolean).join(' · ');
+        addMarker(p.lat, p.lon, cat, igPopup(p), `@${p.username}`, meta);
+      } else noCoordPosts.push({ type: 'ig', item: p });
     });
     data.osm_eat.forEach(p => {
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, 'eat', placePopup(p, false));
+      if (p.lat != null && p.lon != null)
+        addMarker(p.lat, p.lon, 'eat', placePopup(p, false), p.name, p.address || p.categories.join(' · '));
       else noCoordPosts.push({ type: 'osm', item: p });
     });
     data.osm_do.forEach(p => {
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, 'do', placePopup(p, false));
+      if (p.lat != null && p.lon != null)
+        addMarker(p.lat, p.lon, 'do', placePopup(p, false), p.name, p.address || p.categories.join(' · '));
       else noCoordPosts.push({ type: 'osm', item: p });
     });
     data.osm_sleep.forEach(p => {
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, 'sleep', placePopup(p, false));
+      if (p.lat != null && p.lon != null)
+        addMarker(p.lat, p.lon, 'sleep', placePopup(p, false), p.name, p.address || p.categories.join(' · '));
       else noCoordPosts.push({ type: 'osm', item: p });
     });
 
@@ -540,6 +590,35 @@
     // event that resets the view, producing the "world map" bug.
     _map.invalidateSize();
 
+    // Build sidebar
+    const sidebarList = document.getElementById('sidebarList');
+    const { emoji: _e } = {}; // unused — access via _CATEGORY_STYLE
+    sidebarList.innerHTML = sidebarRows.length
+      ? sidebarRows.map(({ category, name, meta, idx }) => {
+          const { emoji } = _CATEGORY_STYLE[category] || { emoji: '📍' };
+          return `<div class="sidebar-item" onclick="focusMarker(${idx})" data-idx="${idx}">
+            <div class="sidebar-icon">${emoji}</div>
+            <div>
+              <div class="sidebar-name">${esc(name)}</div>
+              ${meta ? `<div class="sidebar-meta">${esc(meta)}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')
+      : '<div style="padding:1rem;color:var(--muted);font-size:.85rem">No items to show</div>';
+
+    // Link sidebar DOM elements to markers for two-way highlight
+    sidebarRows.forEach(({ idx }) => {
+      const el = sidebarList.querySelector(`[data-idx="${idx}"]`);
+      _markerItems[idx] = { marker: _markers[idx], el };
+      _markers[idx].on('click', () => {
+        if (_activeIdx >= 0 && _markerItems[_activeIdx])
+          _markerItems[_activeIdx].el.classList.remove('active');
+        _activeIdx = idx;
+        el.classList.add('active');
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    });
+
     _markers.forEach(m => m.addTo(_map));
 
     if (allPoints.length) {
@@ -558,7 +637,6 @@
       }
     }
 
-    // Render no-coordinates section below the map
     renderNoCoords(noCoordPosts);
   }
 
