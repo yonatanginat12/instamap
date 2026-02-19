@@ -96,10 +96,12 @@ def _slug(location: str) -> str:
 def _hashtags_for(location: str, category: str) -> list[str]:
     s = _slug(location)
     tags: list[str] = []
-    if category in ("restaurants", "all"):
+    if category in ("eat", "all"):
         tags += [f"{s}food", f"{s}eats", f"{s}restaurants"]
-    if category in ("things_to_do", "all"):
+    if category in ("do", "all"):
         tags += [f"{s}", f"thingstodoin{s}", f"{s}activities"]
+    if category in ("sleep", "all"):
+        tags += [f"{s}hotel", f"{s}hotels"]
     seen: set[str] = set()
     return [t for t in tags if not (t in seen or seen.add(t))]  # type: ignore[func-returns-value]
 
@@ -182,8 +184,9 @@ def _search_sync(location: str) -> tuple[list[InstagramPost], list[str]]:
 
     # Always fetch both categories so the UI can show both sections
     plan: list[tuple[str, str]] = [
-        *[(t, "restaurants") for t in _hashtags_for(location, "restaurants")[:1]],
-        *[(t, "things_to_do") for t in _hashtags_for(location, "things_to_do")[:1]],
+        *[(t, "eat")   for t in _hashtags_for(location, "eat")[:1]],
+        *[(t, "do")    for t in _hashtags_for(location, "do")[:1]],
+        *[(t, "sleep") for t in _hashtags_for(location, "sleep")[:1]],
     ]
 
     seen: set[str] = set()

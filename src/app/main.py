@@ -12,7 +12,6 @@ load_dotenv()
 from .instagram import search_instagram  # noqa: E402
 from .models import InstagramPost, PlacesResponse, SearchResponse  # noqa: E402
 from .overpass import _geocode, search_osm  # noqa: E402
-# from .yelp import search_yelp  # noqa: E402  (disabled — re-enable when needed)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,9 +45,9 @@ def health() -> dict:
 @app.get("/api/search/places", response_model=PlacesResponse)
 async def search_places(
     location: str = Query(..., min_length=2),
-    category: str = Query("all", pattern="^(all|restaurants|things_to_do)$"),
+    category: str = Query("all", pattern="^(all|eat|do|sleep)$"),
 ) -> PlacesResponse:
-    """Fast endpoint: Yelp + OSM only (~3-8 s). Returns location coords for map centering."""
+    """Fast endpoint: OSM only (~3-8 s). Returns location coords for map centering."""
     key = (location.lower().strip(), category)
     cached = _places_cache.get(key)
     if cached and time.time() - cached[0] < _CACHE_TTL:
@@ -63,9 +62,9 @@ async def search_places(
     osm_result = await _with_timeout(
         search_osm(location, category),
         timeout=22.0,
-        default=([], [], ["OSM: request timed out"], None),
+        default=([], [], [], ["OSM: request timed out"], None),
     )
-    osm_restaurants, osm_activities, osm_warn, osm_coords = osm_result
+    osm_eat, osm_do, osm_sleep, osm_warn, osm_coords = osm_result
 
     coords = osm_coords or await geo_task
 
@@ -75,8 +74,9 @@ async def search_places(
         location_lat=coords[0] if coords else None,
         location_lon=coords[1] if coords else None,
         yelp_businesses=[],
-        osm_restaurants=osm_restaurants,
-        osm_activities=osm_activities,
+        osm_eat=osm_eat,
+        osm_do=osm_do,
+        osm_sleep=osm_sleep,
         warnings=osm_warn,
     )
     _places_cache[key] = (time.time(), result)
@@ -86,7 +86,7 @@ async def search_places(
 @app.get("/api/search/instagram", response_model=list[InstagramPost])
 async def search_instagram_endpoint(
     location: str = Query(..., min_length=2),
-    category: str = Query("all", pattern="^(all|restaurants|things_to_do)$"),
+    category: str = Query("all", pattern="^(all|eat|do|sleep)$"),
 ) -> list[InstagramPost]:
     """Slow endpoint: Instagram only. Called in parallel with /places by the frontend."""
     key = (location.lower().strip(), category)
@@ -108,7 +108,7 @@ async def search_instagram_endpoint(
 @app.get("/api/search", response_model=SearchResponse)
 async def search(
     location: str = Query(..., min_length=2),
-    category: str = Query("all", pattern="^(all|restaurants|things_to_do)$"),
+    category: str = Query("all", pattern="^(all|eat|do|sleep)$"),
 ) -> SearchResponse:
     places, ig_posts = await asyncio.gather(
         search_places(location, category),
@@ -121,7 +121,8 @@ async def search(
         location_lon=places.location_lon,
         instagram_posts=ig_posts,
         yelp_businesses=places.yelp_businesses,
-        osm_restaurants=places.osm_restaurants,
-        osm_activities=places.osm_activities,
+        osm_eat=places.osm_eat,
+        osm_do=places.osm_do,
+        osm_sleep=places.osm_sleep,
         warnings=places.warnings,
     )

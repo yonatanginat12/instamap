@@ -79,11 +79,12 @@
     /* ── Main ── */
     main { max-width: 1300px; margin: 2rem auto; padding: 0 1.25rem 4rem; }
 
-    /* ── Two-column grid ── */
+    /* ── Three-column grid ── */
     .results-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem;
     }
-    @media (max-width: 800px) { .results-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 1000px) { .results-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 600px)  { .results-grid { grid-template-columns: 1fr; } }
 
     /* ── Map ── */
     #mapView { display: none; }
@@ -189,6 +190,14 @@
     .hidden-card { display: none; }
     .hidden-card.visible { display: block; }
 
+    /* ── Map icon markers ── */
+    .map-icon {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    }
+
     /* ── Map popup ── */
     .map-popup img { width: 120px; height: 120px; object-fit: cover; border-radius: 6px; display: block; margin-bottom: .4rem; }
     .map-popup-name { font-weight: 700; font-size: .9rem; margin-bottom: .2rem; }
@@ -247,51 +256,62 @@
     <div id="gridView">
       <div class="results-grid">
 
-        <div id="col-restaurants">
+        <div id="col-eat">
           <div class="section-header">
-            <span style="font-size:1.4rem">🍽️</span><h2>Restaurants</h2>
+            <span style="font-size:1.4rem">🍽️</span><h2>Eat</h2>
           </div>
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
-            <div class="cards" id="ig-restaurants-cards"></div>
-            <div class="show-more-wrap" id="ig-restaurants-more" hidden>
-              <button class="show-more-btn" onclick="showMore('ig-restaurants')">Show more</button>
+            <div class="cards" id="ig-eat-cards"></div>
+            <div class="show-more-wrap" id="ig-eat-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-eat')">Show more</button>
             </div>
           </div>
-          <!-- Yelp disabled — re-enable by uncommenting and restoring search_yelp in main.py
-          <div class="source-block">
-            <div class="source-label"><span class="source-pill pill-yelp">Yelp</span></div>
-            <div class="cards" id="yelp-cards"></div>
-            <div class="show-more-wrap" id="yelp-more" hidden>
-              <button class="show-more-btn" onclick="showMore('yelp')">Show more</button>
-            </div>
-          </div>
-          -->
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
-            <div class="cards" id="osm-restaurants-cards"></div>
-            <div class="show-more-wrap" id="osm-restaurants-more" hidden>
-              <button class="show-more-btn" onclick="showMore('osm-restaurants')">Show more</button>
+            <div class="cards" id="osm-eat-cards"></div>
+            <div class="show-more-wrap" id="osm-eat-more" hidden>
+              <button class="show-more-btn" onclick="showMore('osm-eat')">Show more</button>
             </div>
           </div>
         </div>
 
-        <div id="col-activities">
+        <div id="col-do">
           <div class="section-header">
-            <span style="font-size:1.4rem">🗺️</span><h2>Things To Do</h2>
+            <span style="font-size:1.4rem">🎭</span><h2>Do</h2>
           </div>
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
-            <div class="cards" id="ig-activities-cards"></div>
-            <div class="show-more-wrap" id="ig-activities-more" hidden>
-              <button class="show-more-btn" onclick="showMore('ig-activities')">Show more</button>
+            <div class="cards" id="ig-do-cards"></div>
+            <div class="show-more-wrap" id="ig-do-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-do')">Show more</button>
             </div>
           </div>
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
-            <div class="cards" id="osm-activities-cards"></div>
-            <div class="show-more-wrap" id="osm-activities-more" hidden>
-              <button class="show-more-btn" onclick="showMore('osm-activities')">Show more</button>
+            <div class="cards" id="osm-do-cards"></div>
+            <div class="show-more-wrap" id="osm-do-more" hidden>
+              <button class="show-more-btn" onclick="showMore('osm-do')">Show more</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="col-sleep">
+          <div class="section-header">
+            <span style="font-size:1.4rem">🛏️</span><h2>Sleep</h2>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="cards" id="ig-sleep-cards"></div>
+            <div class="show-more-wrap" id="ig-sleep-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-sleep')">Show more</button>
+            </div>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
+            <div class="cards" id="osm-sleep-cards"></div>
+            <div class="show-more-wrap" id="osm-sleep-more" hidden>
+              <button class="show-more-btn" onclick="showMore('osm-sleep')">Show more</button>
             </div>
           </div>
         </div>
@@ -303,10 +323,10 @@
     <div id="mapView">
       <div id="map"></div>
       <div id="mapLegend">
-        <div class="legend-item"><div class="legend-dot" style="background:#c2185b"></div>Instagram · Restaurants</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#7b1fa2"></div>Instagram · Things To Do</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#2e7d32"></div>OSM · Restaurants</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#1565c0"></div>OSM · Activities</div>
+        <div class="legend-item"><span>🍽️</span> Eat</div>
+        <div class="legend-item"><span>🎭</span> Do</div>
+        <div class="legend-item"><span>🛏️</span> Sleep</div>
+        <div class="legend-item"><span>📷</span> Instagram</div>
       </div>
       <div id="mapNoCoords" style="margin-top:2rem" hidden></div>
     </div>
@@ -416,11 +436,23 @@
   }
 
   /* ── Map ── */
-  function circleMarker(lat, lon, color, popupHtml) {
-    return L.circleMarker([lat, lon], {
-      radius: 8, color: '#fff', weight: 2,
-      fillColor: color, fillOpacity: 0.9,
-    }).bindPopup(popupHtml, { maxWidth: 220 });
+  const _CATEGORY_STYLE = {
+    eat:   { emoji: '🍽️', bg: '#e53935' },
+    do:    { emoji: '🎭', bg: '#7b1fa2' },
+    sleep: { emoji: '🛏️', bg: '#1565c0' },
+    ig:    { emoji: '📷', bg: '#37474f' },
+  };
+
+  function iconMarker(lat, lon, category, popupHtml) {
+    const { emoji, bg } = _CATEGORY_STYLE[category] || _CATEGORY_STYLE.ig;
+    const icon = L.divIcon({
+      html: `<div class="map-icon" style="background:${bg}">${emoji}</div>`,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -18],
+    });
+    return L.marker([lat, lon], { icon }).bindPopup(popupHtml, { maxWidth: 220 });
   }
 
   function igPopup(p) {
@@ -468,27 +500,27 @@
     const allPoints = [];
     const noCoordPosts  = [];  // items without coordinates → listed below map
 
-    function addMarker(lat, lon, color, popupHtml) {
-      const m = circleMarker(lat, lon, color, popupHtml);
+    function addMarker(lat, lon, category, popupHtml) {
+      const m = iconMarker(lat, lon, category, popupHtml);
       _markers.push(m);
       allPoints.push([lat, lon]);
     }
 
     data.instagram_posts.forEach(p => {
-      const color = p.post_category === 'restaurants' ? '#c2185b' : '#7b1fa2';
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, color, igPopup(p));
+      const cat = ['eat','do','sleep'].includes(p.post_category) ? p.post_category : 'ig';
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, cat, igPopup(p));
       else noCoordPosts.push({ type: 'ig', item: p });
     });
-    data.yelp_businesses.forEach(b => {
-      if (b.lat != null && b.lon != null) addMarker(b.lat, b.lon, '#c0392b', placePopup(b, true));
-      else noCoordPosts.push({ type: 'yelp', item: b });
-    });
-    data.osm_restaurants.forEach(p => {
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, '#2e7d32', placePopup(p, false));
+    data.osm_eat.forEach(p => {
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, 'eat', placePopup(p, false));
       else noCoordPosts.push({ type: 'osm', item: p });
     });
-    data.osm_activities.forEach(p => {
-      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, '#1565c0', placePopup(p, false));
+    data.osm_do.forEach(p => {
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, 'do', placePopup(p, false));
+      else noCoordPosts.push({ type: 'osm', item: p });
+    });
+    data.osm_sleep.forEach(p => {
+      if (p.lat != null && p.lon != null) addMarker(p.lat, p.lon, 'sleep', placePopup(p, false));
       else noCoordPosts.push({ type: 'osm', item: p });
     });
 
@@ -548,13 +580,11 @@
       </div>`;
   }
 
-  /* ── Render places (Yelp + OSM) — called immediately on phase 1 ── */
+  /* ── Render places (OSM) — called immediately on phase 1 ── */
   function renderPlaces(data) {
-    // fillCards('yelp-cards', 'yelp-more', data.yelp_businesses.map(b => renderPlaceCard(b, true)));
-    fillCards('osm-restaurants-cards', 'osm-restaurants-more',
-      data.osm_restaurants.map(p => renderPlaceCard(p, false)));
-    fillCards('osm-activities-cards', 'osm-activities-more',
-      data.osm_activities.map(p => renderPlaceCard(p, false)));
+    fillCards('osm-eat-cards',   'osm-eat-more',   data.osm_eat.map(p   => renderPlaceCard(p, false)));
+    fillCards('osm-do-cards',    'osm-do-more',    data.osm_do.map(p    => renderPlaceCard(p, false)));
+    fillCards('osm-sleep-cards', 'osm-sleep-more', data.osm_sleep.map(p => renderPlaceCard(p, false)));
 
     const warnEl = document.getElementById('warnings');
     if (data.warnings?.length) {
@@ -610,8 +640,9 @@
       <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
       Loading Instagram…
     </div>`;
-    document.getElementById('ig-restaurants-cards').innerHTML = placeholder;
-    document.getElementById('ig-activities-cards').innerHTML = placeholder;
+    ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
+      document.getElementById(id).innerHTML = placeholder;
+    });
   }
 
   /* ── Search ── */
@@ -644,14 +675,15 @@
 
       // Merge into a partial render (Instagram sections show spinner)
       _lastData = {
-        location: placesData.location,
+        location:     placesData.location,
         location_lat: placesData.location_lat,
         location_lon: placesData.location_lon,
         instagram_posts: [],
         yelp_businesses: placesData.yelp_businesses,
-        osm_restaurants: placesData.osm_restaurants,
-        osm_activities:  placesData.osm_activities,
-        warnings: placesData.warnings,
+        osm_eat:   placesData.osm_eat,
+        osm_do:    placesData.osm_do,
+        osm_sleep: placesData.osm_sleep,
+        warnings:  placesData.warnings,
       };
       renderPlaces(_lastData);
       showIgLoading();
@@ -663,17 +695,17 @@
       // Phase 2: fill in Instagram when ready
       igPromise.then(r => r.ok ? r.json() : []).then(posts => {
         _lastData.instagram_posts = posts;
-        const igFood       = posts.filter(p => p.post_category === 'restaurants');
-        const igActivities = posts.filter(p => p.post_category === 'things_to_do');
-        fillCards('ig-restaurants-cards', 'ig-restaurants-more', igFood.map(renderIgCard));
-        fillCards('ig-activities-cards', 'ig-activities-more', igActivities.map(renderIgCard));
+        fillCards('ig-eat-cards',   'ig-eat-more',   posts.filter(p => p.post_category === 'eat').map(renderIgCard));
+        fillCards('ig-do-cards',    'ig-do-more',    posts.filter(p => p.post_category === 'do').map(renderIgCard));
+        fillCards('ig-sleep-cards', 'ig-sleep-more', posts.filter(p => p.post_category === 'sleep').map(renderIgCard));
         // Refresh map if it's open
         if (document.getElementById('mapView').style.display !== 'none') {
           initMap(_lastData);
         }
       }).catch(() => {
-        document.getElementById('ig-restaurants-cards').innerHTML = '<div class="empty">Instagram unavailable</div>';
-        document.getElementById('ig-activities-cards').innerHTML  = '<div class="empty">Instagram unavailable</div>';
+        ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
+          document.getElementById(id).innerHTML = '<div class="empty">Instagram unavailable</div>';
+        });
       }).finally(() => {
         document.getElementById('loading').hidden = true;
         btn.disabled = false; btn.textContent = 'Search';

@@ -24,17 +24,32 @@ _overpass_client = httpx.AsyncClient(
 # Geocode cache — avoid re-hitting Nominatim for the same location
 _geocode_cache: dict[str, tuple[float, float]] = {}
 
-_RESTAURANT_TAGS = [
+_EAT_TAGS = [
     '["amenity"="restaurant"]',
     '["amenity"="cafe"]',
     '["amenity"="bar"]',
+    '["amenity"="pub"]',
+    '["amenity"="fast_food"]',
+    '["amenity"="food_court"]',
 ]
-_ACTIVITY_TAGS = [
+_DO_TAGS = [
     '["tourism"="attraction"]',
     '["tourism"="museum"]',
     '["leisure"="park"]',
     '["amenity"="theatre"]',
+    '["amenity"="cinema"]',
+    '["amenity"="nightclub"]',
 ]
+_SLEEP_TAGS = [
+    '["tourism"="hotel"]',
+    '["tourism"="hostel"]',
+    '["tourism"="guest_house"]',
+    '["tourism"="motel"]',
+    '["tourism"="apartment"]',
+]
+
+_EAT_AMENITY = {"restaurant", "cafe", "bar", "pub", "fast_food", "food_court", "bistro"}
+_SLEEP_TOURISM = {"hotel", "hostel", "guest_house", "motel", "apartment"}
 
 
 async def _geocode(location: str) -> tuple[float, float] | None:
@@ -117,18 +132,17 @@ def _parse_elements(elements: list[dict], limit: int) -> list[FoursquarePlace]:
 
 async def search_osm(
     location: str,
-    category: str,  # kept for API compat — we always fetch both
-) -> tuple[list[FoursquarePlace], list[FoursquarePlace], list[str], tuple[float, float] | None]:
-    """Returns (restaurant_places, activity_places, warnings, coords)."""
+    category: str,  # kept for API compat — we always fetch all three
+) -> tuple[list[FoursquarePlace], list[FoursquarePlace], list[FoursquarePlace], list[str], tuple[float, float] | None]:
+    """Returns (eat, do, sleep, warnings, coords)."""
     coords = await _geocode(location)
     if not coords:
-        return [], [], [f"OpenStreetMap: could not geocode '{location}'"], None
+        return [], [], [], [f"OpenStreetMap: could not geocode '{location}'"], None
 
     lat, lon = coords
     radius = 2000
 
-    # Fetch restaurants and activities in a single Overpass query
-    all_tags = _RESTAURANT_TAGS + _ACTIVITY_TAGS
+    all_tags = _EAT_TAGS + _DO_TAGS + _SLEEP_TAGS
     query = _build_query(all_tags, lat, lon, radius)
 
     last_exc: Exception | None = None
@@ -142,24 +156,26 @@ async def search_osm(
             logger.warning("Overpass mirror %s failed: %s", mirror, exc)
             last_exc = exc
     else:
-        return [], [], [f"OpenStreetMap unavailable: {last_exc}"], coords
+        return [], [], [], [f"OpenStreetMap unavailable: {last_exc}"], coords
 
     try:
-        _FOOD_VALS = {"restaurant", "cafe", "bar", "fast_food", "pub", "bistro"}
-        restaurant_els = [
-            el for el in elements
-            if el.get("tags", {}).get("amenity", "") in _FOOD_VALS
-        ]
-        activity_els = [
-            el for el in elements
-            if el.get("tags", {}).get("amenity", "") not in _FOOD_VALS
-        ]
+        eat_els, sleep_els, do_els = [], [], []
+        for el in elements:
+            tags_el = el.get("tags", {})
+            if tags_el.get("amenity", "") in _EAT_AMENITY:
+                eat_els.append(el)
+            elif tags_el.get("tourism", "") in _SLEEP_TOURISM:
+                sleep_els.append(el)
+            else:
+                do_els.append(el)
+
         return (
-            _parse_elements(restaurant_els, limit=12),
-            _parse_elements(activity_els, limit=12),
+            _parse_elements(eat_els, limit=12),
+            _parse_elements(do_els, limit=12),
+            _parse_elements(sleep_els, limit=12),
             [],
             coords,
         )
     except Exception as exc:
         logger.warning("Overpass parse failed: %s", exc)
-        return [], [], [f"OpenStreetMap parse failed: {exc}"], coords
+        return [], [], [], [f"OpenStreetMap parse failed: {exc}"], coords
