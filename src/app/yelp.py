@@ -8,6 +8,7 @@ from .models import YelpBusiness
 logger = logging.getLogger(__name__)
 
 _BASE = "https://api.yelp.com/v3"
+_client = httpx.AsyncClient(timeout=10)
 
 
 def _term_for(category: str) -> str:
@@ -26,19 +27,18 @@ async def search_yelp(
         return [], ["Yelp: set YELP_API_KEY in .env to enable restaurant results"]
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{_BASE}/businesses/search",
-                headers={"Authorization": f"Bearer {api_key}"},
-                params={
-                    "term": _term_for(category),
-                    "location": location,
-                    "limit": 10,
-                    "sort_by": "rating",
-                },
-            )
-            resp.raise_for_status()
-            businesses = resp.json().get("businesses", [])
+        resp = await _client.get(
+            f"{_BASE}/businesses/search",
+            headers={"Authorization": f"Bearer {api_key}"},
+            params={
+                "term": _term_for(category),
+                "location": location,
+                "limit": 10,
+                "sort_by": "rating",
+            },
+        )
+        resp.raise_for_status()
+        businesses = resp.json().get("businesses", [])
 
         results: list[YelpBusiness] = []
         for b in businesses:

@@ -13,6 +13,17 @@ _OVERPASS_MIRRORS = [
 ]
 _NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
+# Persistent clients — reuse TCP connections across requests
+_nominatim_client = httpx.AsyncClient(
+    timeout=10, headers={"User-Agent": "discover-app/1.0"}
+)
+_overpass_client = httpx.AsyncClient(
+    timeout=25, headers={"User-Agent": "discover-app/1.0"}
+)
+
+# Geocode cache — avoid re-hitting Nominatim for the same location
+_geocode_cache: dict[str, tuple[float, float]] = {}
+
 _RESTAURANT_TAGS = [
     '["amenity"="restaurant"]',
     '["amenity"="cafe"]',
@@ -27,18 +38,20 @@ _ACTIVITY_TAGS = [
 
 
 async def _geocode(location: str) -> tuple[float, float] | None:
+    key = location.lower().strip()
+    if key in _geocode_cache:
+        return _geocode_cache[key]
     try:
-        async with httpx.AsyncClient(
-            timeout=10, headers={"User-Agent": "discover-app/1.0"}
-        ) as client:
-            r = await client.get(
-                _NOMINATIM_URL,
-                params={"q": location, "format": "json", "limit": 1},
-            )
-            r.raise_for_status()
-            results = r.json()
-            if results:
-                return float(results[0]["lat"]), float(results[0]["lon"])
+        r = await _nominatim_client.get(
+            _NOMINATIM_URL,
+            params={"q": location, "format": "json", "limit": 1},
+        )
+        r.raise_for_status()
+        results = r.json()
+        if results:
+            coords = float(results[0]["lat"]), float(results[0]["lon"])
+            _geocode_cache[key] = coords
+            return coords
     except Exception as exc:
         logger.warning("Nominatim geocode failed: %s", exc)
     return None
@@ -105,34 +118,31 @@ def _parse_elements(elements: list[dict], limit: int) -> list[FoursquarePlace]:
 async def search_osm(
     location: str,
     category: str,  # kept for API compat — we always fetch both
-) -> tuple[list[FoursquarePlace], list[FoursquarePlace], list[str]]:
-    """Returns (restaurant_places, activity_places, warnings)."""
+) -> tuple[list[FoursquarePlace], list[FoursquarePlace], list[str], tuple[float, float] | None]:
+    """Returns (restaurant_places, activity_places, warnings, coords)."""
     coords = await _geocode(location)
     if not coords:
-        return [], [], [f"OpenStreetMap: could not geocode '{location}'"]
+        return [], [], [f"OpenStreetMap: could not geocode '{location}'"], None
 
     lat, lon = coords
-    radius = 3000
+    radius = 2000
 
     # Fetch restaurants and activities in a single Overpass query
     all_tags = _RESTAURANT_TAGS + _ACTIVITY_TAGS
     query = _build_query(all_tags, lat, lon, radius)
 
     last_exc: Exception | None = None
-    async with httpx.AsyncClient(
-        timeout=25, headers={"User-Agent": "discover-app/1.0"}
-    ) as client:
-        for mirror in _OVERPASS_MIRRORS:
-            try:
-                r = await client.post(mirror, data={"data": query})
-                r.raise_for_status()
-                elements = r.json().get("elements", [])
-                break
-            except Exception as exc:
-                logger.warning("Overpass mirror %s failed: %s", mirror, exc)
-                last_exc = exc
-        else:
-            return [], [], [f"OpenStreetMap unavailable: {last_exc}"]
+    for mirror in _OVERPASS_MIRRORS:
+        try:
+            r = await _overpass_client.post(mirror, data={"data": query})
+            r.raise_for_status()
+            elements = r.json().get("elements", [])
+            break
+        except Exception as exc:
+            logger.warning("Overpass mirror %s failed: %s", mirror, exc)
+            last_exc = exc
+    else:
+        return [], [], [f"OpenStreetMap unavailable: {last_exc}"], coords
 
     try:
         _FOOD_VALS = {"restaurant", "cafe", "bar", "fast_food", "pub", "bistro"}
@@ -148,7 +158,8 @@ async def search_osm(
             _parse_elements(restaurant_els, limit=12),
             _parse_elements(activity_els, limit=12),
             [],
+            coords,
         )
     except Exception as exc:
         logger.warning("Overpass parse failed: %s", exc)
-        return [], [], [f"OpenStreetMap parse failed: {exc}"]
+        return [], [], [f"OpenStreetMap parse failed: {exc}"], coords

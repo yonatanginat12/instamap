@@ -496,9 +496,17 @@
     if (allPoints.length) {
       _map.fitBounds(L.latLngBounds(allPoints), { padding: [40, 40], maxZoom: 16 });
     } else {
-      // No result coordinates — geocode the searched location and center there
-      const coords = await geocodeLocation(data.location);
-      _map.setView(coords ?? [0, 0], coords ? 13 : 2);
+      // Use location coords from the API response (already geocoded server-side)
+      const center = data.location_lat != null
+        ? [data.location_lat, data.location_lon]
+        : null;
+      if (center) {
+        _map.setView(center, 13);
+      } else {
+        // Last resort: geocode in browser
+        const coords = await geocodeLocation(data.location);
+        _map.setView(coords ?? [0, 0], coords ? 13 : 2);
+      }
     }
 
     // Force Leaflet to recalculate the container size now that it's visible
@@ -526,32 +534,32 @@
       </div>`;
   }
 
-  /* ── Main render ── */
-  function render(data) {
-    _lastData = data;
-    const igFood       = data.instagram_posts.filter(p => p.post_category === 'restaurants');
-    const igActivities = data.instagram_posts.filter(p => p.post_category === 'things_to_do');
-
-    fillCards('ig-restaurants-cards', 'ig-restaurants-more', igFood.map(renderIgCard));
+  /* ── Render places (Yelp + OSM) — called immediately on phase 1 ── */
+  function renderPlaces(data) {
     fillCards('yelp-cards', 'yelp-more',
       data.yelp_businesses.map(b => renderPlaceCard(b, true)));
     fillCards('osm-restaurants-cards', 'osm-restaurants-more',
       data.osm_restaurants.map(p => renderPlaceCard(p, false)));
-    fillCards('ig-activities-cards', 'ig-activities-more', igActivities.map(renderIgCard));
     fillCards('osm-activities-cards', 'osm-activities-more',
       data.osm_activities.map(p => renderPlaceCard(p, false)));
 
     const warnEl = document.getElementById('warnings');
-    if (data.warnings.length) {
+    if (data.warnings?.length) {
       warnEl.innerHTML = `<ul>${data.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`;
       warnEl.hidden = false;
     } else {
       warnEl.hidden = true;
     }
+  }
 
-    // Reset to grid view on new search
-    setView('grid');
-    document.getElementById('viewToggle').hidden = false;
+  /* ── Instagram loading placeholder ── */
+  function showIgLoading() {
+    const placeholder = `<div class="empty" style="padding:1rem">
+      <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
+      Loading Instagram…
+    </div>`;
+    document.getElementById('ig-restaurants-cards').innerHTML = placeholder;
+    document.getElementById('ig-activities-cards').innerHTML = placeholder;
   }
 
   /* ── Search ── */
@@ -570,18 +578,59 @@
     // Reset map on new search
     if (_map) { _markers.forEach(m => m.remove()); _markers = []; }
 
+    const qs = `location=${encodeURIComponent(location)}&category=all`;
+
+    // Fire both requests in parallel — places is fast, instagram is slow
+    const placesPromise = fetch(`/api/search/places?${qs}`);
+    const igPromise     = fetch(`/api/search/instagram?${qs}`);
+
     try {
-      const r = await fetch(
-        `/api/search?location=${encodeURIComponent(location)}&category=all`
-      );
-      if (!r.ok) throw new Error(`Server error ${r.status}`);
-      render(await r.json());
+      // Phase 1: render places as soon as they arrive (~3-8s)
+      const pr = await placesPromise;
+      if (!pr.ok) throw new Error(`Server error ${pr.status}`);
+      const placesData = await pr.json();
+
+      // Merge into a partial render (Instagram sections show spinner)
+      _lastData = {
+        location: placesData.location,
+        location_lat: placesData.location_lat,
+        location_lon: placesData.location_lon,
+        instagram_posts: [],
+        yelp_businesses: placesData.yelp_businesses,
+        osm_restaurants: placesData.osm_restaurants,
+        osm_activities:  placesData.osm_activities,
+        warnings: placesData.warnings,
+      };
+      renderPlaces(_lastData);
+      showIgLoading();
+      document.getElementById('loading').hidden = false; // keep spinner for IG
       document.getElementById('results').hidden = false;
+      document.getElementById('viewToggle').hidden = false;
+      setView('grid');
+
+      // Phase 2: fill in Instagram when ready
+      igPromise.then(r => r.ok ? r.json() : []).then(posts => {
+        _lastData.instagram_posts = posts;
+        const igFood       = posts.filter(p => p.post_category === 'restaurants');
+        const igActivities = posts.filter(p => p.post_category === 'things_to_do');
+        fillCards('ig-restaurants-cards', 'ig-restaurants-more', igFood.map(renderIgCard));
+        fillCards('ig-activities-cards', 'ig-activities-more', igActivities.map(renderIgCard));
+        // Refresh map if it's open
+        if (document.getElementById('mapView').style.display !== 'none') {
+          initMap(_lastData);
+        }
+      }).catch(() => {
+        document.getElementById('ig-restaurants-cards').innerHTML = '<div class="empty">Instagram unavailable</div>';
+        document.getElementById('ig-activities-cards').innerHTML  = '<div class="empty">Instagram unavailable</div>';
+      }).finally(() => {
+        document.getElementById('loading').hidden = true;
+        btn.disabled = false; btn.textContent = 'Search';
+      });
+
     } catch (err) {
       const el = document.getElementById('error');
       el.textContent = `Error: ${err.message}`;
       el.hidden = false;
-    } finally {
       document.getElementById('loading').hidden = true;
       btn.disabled = false; btn.textContent = 'Search';
     }

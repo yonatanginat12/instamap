@@ -41,9 +41,22 @@ class FoursquarePlace(BaseModel):
     lon: float | None = None
 
 
+class PlacesResponse(BaseModel):
+    location: str
+    category: str
+    location_lat: float | None = None
+    location_lon: float | None = None
+    yelp_businesses: list[YelpBusiness]
+    osm_restaurants: list[FoursquarePlace]
+    osm_activities: list[FoursquarePlace]
+    warnings: list[str] = []
+
+
 class SearchResponse(BaseModel):
     location: str
     category: str
+    location_lat: float | None = None
+    location_lon: float | None = None
     instagram_posts: list[InstagramPost]
     yelp_businesses: list[YelpBusiness]
     osm_restaurants: list[FoursquarePlace]

@@ -182,8 +182,8 @@ def _search_sync(location: str) -> tuple[list[InstagramPost], list[str]]:
 
     # Always fetch both categories so the UI can show both sections
     plan: list[tuple[str, str]] = [
-        *[(t, "restaurants") for t in _hashtags_for(location, "restaurants")[:2]],
-        *[(t, "things_to_do") for t in _hashtags_for(location, "things_to_do")[:2]],
+        *[(t, "restaurants") for t in _hashtags_for(location, "restaurants")[:1]],
+        *[(t, "things_to_do") for t in _hashtags_for(location, "things_to_do")[:1]],
     ]
 
     seen: set[str] = set()
