@@ -97,11 +97,14 @@ def _hashtags_for(location: str, category: str) -> list[str]:
     s = _slug(location)
     tags: list[str] = []
     if category in ("eat", "all"):
-        tags += [f"{s}food", f"{s}eats", f"{s}restaurants"]
+        # Ordered by quality: foodie self-selects engaged food audiences
+        tags += [f"{s}food", f"{s}foodie", f"{s}eats", f"{s}cafe"]
     if category in ("do", "all"):
-        tags += [f"{s}", f"thingstodoin{s}", f"{s}activities"]
+        # visit{city} used by tourism boards; {city}life broad lifestyle tag
+        tags += [f"{s}", f"visit{s}", f"thingstodoin{s}", f"{s}life"]
     if category in ("sleep", "all"):
-        tags += [f"{s}hotel", f"{s}hotels"]
+        # hotel first, then broader accommodation patterns
+        tags += [f"{s}hotel", f"{s}hotels", f"{s}airbnb", f"{s}stay"]
     seen: set[str] = set()
     return [t for t in tags if not (t in seen or seen.add(t))]  # type: ignore[func-returns-value]
 
