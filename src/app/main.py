@@ -11,7 +11,7 @@ load_dotenv()
 
 from .instagram import search_instagram  # noqa: E402
 from .models import InstagramPost, PlacesResponse, SearchResponse  # noqa: E402
-from .overpass import search_osm  # noqa: E402
+from .overpass import _geocode, search_osm  # noqa: E402
 # from .yelp import search_yelp  # noqa: E402  (disabled — re-enable when needed)
 
 logging.basicConfig(level=logging.INFO)
@@ -54,12 +54,20 @@ async def search_places(
     if cached and time.time() - cached[0] < _CACHE_TTL:
         return cached[1]
 
+    # Geocode runs as a separate task so location_lat/lon is always populated
+    # even if the Overpass query times out.
+    geo_task = asyncio.create_task(
+        _with_timeout(_geocode(location), timeout=8.0, default=None)
+    )
+
     osm_result = await _with_timeout(
         search_osm(location, category),
         timeout=22.0,
         default=([], [], ["OSM: request timed out"], None),
     )
-    osm_restaurants, osm_activities, osm_warn, coords = osm_result
+    osm_restaurants, osm_activities, osm_warn, osm_coords = osm_result
+
+    coords = osm_coords or await geo_task
 
     result = PlacesResponse(
         location=location,

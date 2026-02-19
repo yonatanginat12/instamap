@@ -492,6 +492,13 @@
       }).addTo(_map);
     }
 
+    // MUST call invalidateSize() before fitBounds/setView — Leaflet reads
+    // the container size when calculating bounds, and the container may have
+    // been hidden (display:none) before this call, causing a stale 0×0 size.
+    // Calling invalidateSize() after fitBounds triggers an internal resize
+    // event that resets the view, producing the "world map" bug.
+    _map.invalidateSize();
+
     _markers.forEach(m => m.addTo(_map));
 
     if (allPoints.length) {
@@ -509,9 +516,6 @@
         _map.setView(coords ?? [0, 0], coords ? 13 : 2);
       }
     }
-
-    // Force Leaflet to recalculate the container size now that it's visible
-    _map.invalidateSize();
 
     // Render no-coordinates section below the map
     renderNoCoords(noCoordPosts);
