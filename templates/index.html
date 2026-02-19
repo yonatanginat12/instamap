@@ -55,6 +55,13 @@
     }
     #searchBtn:hover { opacity: .88; }
     #searchBtn:disabled { opacity: .5; cursor: not-allowed; }
+    #locateBtn {
+      padding: .65rem .85rem; background: var(--surface); color: var(--accent);
+      border: 1.5px solid var(--border); border-radius: 10px; font-size: 1.1rem;
+      cursor: pointer; transition: background .15s, border-color .15s; line-height: 1;
+    }
+    #locateBtn:hover { background: var(--accent-light); border-color: var(--accent); }
+    #locateBtn:disabled { opacity: .5; cursor: not-allowed; }
 
     /* ── View toggle ── */
     .view-toggle {
@@ -216,6 +223,7 @@
   <p>Explore Instagram posts &amp; places for any location</p>
   <form id="searchForm">
     <input id="location" type="text" placeholder="e.g. Tel Aviv, Paris, New York…" autocomplete="off" required />
+    <button id="locateBtn" type="button" title="Use my current location">📍</button>
     <button id="searchBtn" type="submit">Search</button>
   </form>
   <div class="view-toggle" id="viewToggle" hidden>
@@ -555,6 +563,45 @@
       warnEl.hidden = true;
     }
   }
+
+  /* ── Current location ── */
+  document.getElementById('locateBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    const btn = document.getElementById('locateBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳';
+
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords: { latitude: lat, longitude: lon } }) => {
+        try {
+          const r = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          const data = await r.json();
+          const addr = data.address || {};
+          const city = addr.city || addr.town || addr.village ||
+                       addr.county || addr.state || data.display_name;
+          document.getElementById('location').value = city;
+        } catch {
+          // Fall back to raw coordinates if reverse geocode fails
+          document.getElementById('location').value = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+        }
+        btn.disabled = false;
+        btn.textContent = '📍';
+        document.getElementById('searchForm').dispatchEvent(new Event('submit'));
+      },
+      (err) => {
+        btn.disabled = false;
+        btn.textContent = '📍';
+        alert('Could not get your location: ' + err.message);
+      },
+      { timeout: 10000 }
+    );
+  });
 
   /* ── Instagram loading placeholder ── */
   function showIgLoading() {
