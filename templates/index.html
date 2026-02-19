@@ -64,6 +64,41 @@
     #locateBtn:hover { opacity: 1; text-decoration: underline; }
     #locateBtn:disabled { opacity: .4; cursor: not-allowed; text-decoration: none; }
 
+    /* ── Hashtag tooltip ── */
+    .ig-tip {
+      position: relative; display: inline-flex; align-items: center;
+      margin-left: .4rem; vertical-align: middle;
+    }
+    .ig-tip-icon {
+      width: 17px; height: 17px; border-radius: 50%;
+      background: var(--muted); color: #fff;
+      font-size: .7rem; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: default; user-select: none; flex-shrink: 0;
+    }
+    .ig-tip-box {
+      display: none; position: absolute; left: 50%; bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      background: #1d1d1f; color: #f5f5f7;
+      font-size: .78rem; line-height: 1.55; font-weight: 400;
+      padding: .7rem .9rem; border-radius: 10px;
+      width: 260px; white-space: normal;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+      z-index: 100; pointer-events: none;
+    }
+    .ig-tip-box::after {
+      content: ''; position: absolute; top: 100%; left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #1d1d1f;
+    }
+    .ig-tip:hover .ig-tip-box,
+    .ig-tip:focus-within .ig-tip-box { display: block; }
+    .ig-tip-box code {
+      background: rgba(255,255,255,.12); border-radius: 4px;
+      padding: .1em .35em; font-family: monospace; font-size: .82em;
+    }
+
     /* ── View toggle ── */
     .view-toggle {
       display: flex; justify-content: center; gap: .5rem; margin-top: 1rem;
@@ -257,6 +292,16 @@
   <p>Explore Instagram posts &amp; places for any location</p>
   <form id="searchForm">
     <input id="location" type="text" placeholder="e.g. Tel Aviv, Paris, New York…" autocomplete="off" required />
+    <span class="ig-tip" tabindex="0">
+      <span class="ig-tip-icon">?</span>
+      <div class="ig-tip-box">
+        <strong>Instagram hashtags searched:</strong><br>
+        🍽️ Eat — <code>#{city}food</code>, <code>#{city}eats</code><br>
+        🎭 Do &nbsp;— <code>#{city}</code>, <code>#thingstodoin{city}</code><br>
+        🛏️ Sleep — <code>#{city}hotel</code>, <code>#{city}hotels</code><br><br>
+        <em>Spaces and special characters are removed from the city name.</em>
+      </div>
+    </span>
     <button id="searchBtn" type="submit">Search</button>
   </form>
   <button id="locateBtn" type="button">📍 Use my current location</button>
