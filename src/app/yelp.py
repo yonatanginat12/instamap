@@ -24,7 +24,7 @@ async def search_yelp(
 ) -> tuple[list[YelpBusiness], list[str]]:
     api_key = os.getenv("YELP_API_KEY", "")
     if not api_key:
-        return [], ["Yelp: set YELP_API_KEY in .env to enable restaurant results"]
+        return [], []
 
     try:
         resp = await _client.get(
