@@ -603,7 +603,8 @@
   }
 
   /* ── Card renderers ── */
-  function renderIgCard(p, isFollowee) {
+  function renderIgCard(p) {
+    const isFollowee = p.post_category === 'followee';
     const img = p.image_url
       ? `<img class="ig-img" src="${esc(p.image_url)}" loading="lazy"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
@@ -942,7 +943,7 @@
     section.hidden = false;
     mobTab.hidden  = false;
     document.getElementById('legendFollowee').hidden = false;
-    fillCards('followee-cards', 'followee-more', posts.map(p => renderIgCard(p, true)));
+    fillCards('followee-cards', 'followee-more', posts.map(renderIgCard));
   }
 
   /* ── Search ── */

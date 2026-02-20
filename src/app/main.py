@@ -101,7 +101,8 @@ async def search_instagram_endpoint(
         default=([], []),
     )
     posts.sort(key=lambda p: p.likes, reverse=True)
-    _ig_cache[key] = (time.time(), posts)
+    if posts:  # don't cache empty — could be a timeout while executor was busy
+        _ig_cache[key] = (time.time(), posts)
     return posts
 
 
@@ -122,7 +123,8 @@ async def search_followees_endpoint(
         default=([], []),
     )
     posts.sort(key=lambda p: p.likes, reverse=True)
-    _followee_cache[key] = (time.time(), posts)
+    if posts:  # don't cache empty — could be a timeout while executor was busy
+        _followee_cache[key] = (time.time(), posts)
     return posts
 
 
