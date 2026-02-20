@@ -284,6 +284,30 @@
     .empty { text-align: center; padding: 1.5rem .5rem; color: var(--muted); font-size: .85rem; }
     [hidden] { display: none !important; }
 
+    /* ── Personalize (followees) input ── */
+    .personalize-row {
+      display: flex; align-items: center; gap: .45rem;
+      justify-content: center; margin-top: .55rem;
+    }
+    .personalize-row label {
+      font-size: .82rem; color: var(--muted); white-space: nowrap;
+    }
+    #ig-username {
+      padding: .32rem .7rem; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: .82rem; outline: none;
+      width: 200px; transition: border-color .2s; background: var(--surface);
+    }
+    #ig-username:focus { border-color: var(--accent); }
+    #ig-username::placeholder { color: #aaa; }
+
+    /* ── Followees full-width section ── */
+    #col-followees {
+      margin-bottom: 1.5rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 2px solid var(--accent-light);
+    }
+    .pill-followee { background: #e8f5e9; color: #2e7d32; }
+
     /* ── Mobile category tabs (hidden on desktop) ── */
     .mob-tabs {
       display: none;
@@ -317,6 +341,9 @@
       #location { font-size: 16px; min-width: 0; flex: 1 1 0; }
       #searchBtn { padding: .65rem 1rem; font-size: .92rem; white-space: nowrap; }
       #locateBtn { margin-top: .5rem; font-size: .82rem; }
+      /* 16px prevents iOS auto-zoom on the personalize input too */
+      #ig-username { font-size: 16px; width: 160px; }
+      .personalize-row label { font-size: .78rem; }
 
       /* Tooltip: anchor to left edge on mobile so it doesn't overflow */
       .ig-tip-box { left: 0; right: auto; transform: none; }
@@ -331,6 +358,9 @@
       .results-grid { display: block; }
       #col-eat, #col-do, #col-sleep { display: none; }
       #col-eat.mob-active, #col-do.mob-active, #col-sleep.mob-active { display: block; }
+      /* Followees section on mobile: shown/hidden via mob-active */
+      #col-followees { border-bottom: none; padding-bottom: 0; margin-bottom: 0; display: none; }
+      #col-followees.mob-active { display: block; }
 
       /* Wider cards on single-column layout */
       .cards { grid-template-columns: 1fr 1fr; }
@@ -383,6 +413,10 @@
     <button id="searchBtn" type="submit">Search</button>
   </form>
   <button id="locateBtn" type="button">📍 Use my current location</button>
+  <div class="personalize-row">
+    <label for="ig-username">👥</label>
+    <input id="ig-username" type="text" placeholder="Your Instagram username (optional)" autocomplete="username" />
+  </div>
   <div class="view-toggle" id="viewToggle" hidden>
     <button class="vbtn active" id="btnGrid" onclick="setView('grid')">⊞ Grid</button>
     <button class="vbtn"        id="btnMap"  onclick="setView('map')">🗺 Map</button>
@@ -403,10 +437,25 @@
     <div id="gridView">
       <!-- Mobile-only category tabs -->
       <div class="mob-tabs" id="mobTabs">
-        <button class="mob-tab active" data-tab="eat" onclick="selectMobTab('eat')">🍽️ Eat</button>
-        <button class="mob-tab"       data-tab="do"  onclick="selectMobTab('do')">🎭 Do</button>
-        <button class="mob-tab"       data-tab="sleep" onclick="selectMobTab('sleep')">🛏️ Sleep</button>
+        <button class="mob-tab active" data-tab="eat"      onclick="selectMobTab('eat')">🍽️ Eat</button>
+        <button class="mob-tab"       data-tab="do"       onclick="selectMobTab('do')">🎭 Do</button>
+        <button class="mob-tab"       data-tab="sleep"    onclick="selectMobTab('sleep')">🛏️ Sleep</button>
+        <button class="mob-tab"       data-tab="followee" onclick="selectMobTab('followee')" id="mobFolloweeTab" hidden>👥 You</button>
       </div>
+      <!-- Followees section — only shown when ig_username is set and results arrive -->
+      <div id="col-followees" hidden>
+        <div class="section-header">
+          <span style="font-size:1.4rem">👥</span><h2>From people you follow</h2>
+        </div>
+        <div class="source-block">
+          <div class="source-label"><span class="source-pill pill-followee">Instagram · Your followees</span></div>
+          <div class="cards" id="followee-cards"></div>
+          <div class="show-more-wrap" id="followee-more" hidden>
+            <button class="show-more-btn" onclick="showMore('followee')">Show more</button>
+          </div>
+        </div>
+      </div>
+
       <div class="results-grid">
 
         <div id="col-eat">
@@ -483,6 +532,7 @@
         <div class="legend-item"><span>🎭</span> Do</div>
         <div class="legend-item"><span>🛏️</span> Sleep</div>
         <div class="legend-item"><span>📷</span> Instagram</div>
+        <div class="legend-item" id="legendFollowee" hidden><span>👥</span> Your followees</div>
       </div>
       <div id="mapNoCoords" style="margin-top:2rem" hidden></div>
     </div>
@@ -525,8 +575,9 @@
 
   /* ── Mobile category tabs ── */
   function selectMobTab(cat) {
-    ['eat','do','sleep'].forEach(c => {
-      document.getElementById(`col-${c}`).classList.toggle('mob-active', c === cat);
+    ['eat','do','sleep','followee'].forEach(c => {
+      const col = document.getElementById(`col-${c}`);
+      if (col) col.classList.toggle('mob-active', c === cat);
       const btn = document.querySelector(`#mobTabs [data-tab="${c}"]`);
       if (btn) btn.classList.toggle('active', c === cat);
     });
@@ -603,10 +654,11 @@
 
   /* ── Map ── */
   const _CATEGORY_STYLE = {
-    eat:   { emoji: '🍽️', bg: '#e53935' },
-    do:    { emoji: '🎭', bg: '#7b1fa2' },
-    sleep: { emoji: '🛏️', bg: '#1565c0' },
-    ig:    { emoji: '📷', bg: '#37474f' },
+    eat:      { emoji: '🍽️', bg: '#e53935' },
+    do:       { emoji: '🎭', bg: '#7b1fa2' },
+    sleep:    { emoji: '🛏️', bg: '#1565c0' },
+    ig:       { emoji: '📷', bg: '#37474f' },
+    followee: { emoji: '👥', bg: '#00897b' },
   };
 
   function iconMarker(lat, lon, category, popupHtml) {
@@ -694,6 +746,12 @@
       if (p.lat != null && p.lon != null) {
         const meta = [p.location_name, `❤️ ${p.likes.toLocaleString()}`].filter(Boolean).join(' · ');
         addMarker(p.lat, p.lon, cat, igPopup(p), `@${p.username}`, meta);
+      } else noCoordPosts.push({ type: 'ig', item: p });
+    });
+    (data.followee_posts || []).forEach(p => {
+      if (p.lat != null && p.lon != null) {
+        const meta = [p.location_name, `❤️ ${p.likes.toLocaleString()}`].filter(Boolean).join(' · ');
+        addMarker(p.lat, p.lon, 'followee', igPopup(p), `@${p.username}`, meta);
       } else noCoordPosts.push({ type: 'ig', item: p });
     });
     data.osm_eat.forEach(p => {
@@ -863,10 +921,26 @@
     });
   }
 
+  /* ── Render followee posts ── */
+  function renderFolloweePosts(posts) {
+    const section = document.getElementById('col-followees');
+    const mobTab  = document.getElementById('mobFolloweeTab');
+    if (!posts.length) {
+      section.hidden = true;
+      mobTab.hidden  = true;
+      return;
+    }
+    section.hidden = false;
+    mobTab.hidden  = false;
+    document.getElementById('legendFollowee').hidden = false;
+    fillCards('followee-cards', 'followee-more', posts.map(renderIgCard));
+  }
+
   /* ── Search ── */
   document.getElementById('searchForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const location = document.getElementById('location').value.trim();
+    const location   = document.getElementById('location').value.trim();
+    const igUsername = document.getElementById('ig-username').value.trim();
     if (!location) return;
 
     const btn = document.getElementById('searchBtn');
@@ -876,14 +950,22 @@
     document.getElementById('error').hidden    = true;
     document.getElementById('viewToggle').hidden = true;
 
+    // Reset followees section & legend
+    document.getElementById('col-followees').hidden = true;
+    document.getElementById('mobFolloweeTab').hidden = true;
+    document.getElementById('legendFollowee').hidden = true;
+
     // Reset map on new search
     if (_map) { _markers.forEach(m => m.remove()); _markers = []; }
 
     const qs = `location=${encodeURIComponent(location)}&category=all`;
 
-    // Fire both requests in parallel — places is fast, instagram is slow
-    const placesPromise = fetch(`/api/search/places?${qs}`);
-    const igPromise     = fetch(`/api/search/instagram?${qs}`);
+    // Fire all requests in parallel — places is fast, instagram & followees are slow
+    const placesPromise   = fetch(`/api/search/places?${qs}`);
+    const igPromise       = fetch(`/api/search/instagram?${qs}`);
+    const followeePromise = igUsername
+      ? fetch(`/api/search/followees?${qs}&ig_username=${encodeURIComponent(igUsername)}`)
+      : Promise.resolve(null);
 
     try {
       // Phase 1: render places as soon as they arrive (~3-8s)
@@ -891,35 +973,32 @@
       if (!pr.ok) throw new Error(`Server error ${pr.status}`);
       const placesData = await pr.json();
 
-      // Merge into a partial render (Instagram sections show spinner)
       _lastData = {
-        location:     placesData.location,
-        location_lat: placesData.location_lat,
-        location_lon: placesData.location_lon,
+        location:        placesData.location,
+        location_lat:    placesData.location_lat,
+        location_lon:    placesData.location_lon,
         instagram_posts: [],
+        followee_posts:  [],
         yelp_businesses: placesData.yelp_businesses,
-        osm_eat:   placesData.osm_eat,
-        osm_do:    placesData.osm_do,
-        osm_sleep: placesData.osm_sleep,
-        warnings:  placesData.warnings,
+        osm_eat:         placesData.osm_eat,
+        osm_do:          placesData.osm_do,
+        osm_sleep:       placesData.osm_sleep,
+        warnings:        placesData.warnings,
       };
       renderPlaces(_lastData);
       showIgLoading();
-      document.getElementById('loading').hidden = false; // keep spinner for IG
+      document.getElementById('loading').hidden = false;
       document.getElementById('results').hidden = false;
       document.getElementById('viewToggle').hidden = false;
       setView('grid');
 
-      // Phase 2: fill in Instagram when ready
+      // Phase 2: fill in Instagram hashtag posts when ready
       igPromise.then(r => r.ok ? r.json() : []).then(posts => {
         _lastData.instagram_posts = posts;
         fillCards('ig-eat-cards',   'ig-eat-more',   posts.filter(p => p.post_category === 'eat').map(renderIgCard));
         fillCards('ig-do-cards',    'ig-do-more',    posts.filter(p => p.post_category === 'do').map(renderIgCard));
         fillCards('ig-sleep-cards', 'ig-sleep-more', posts.filter(p => p.post_category === 'sleep').map(renderIgCard));
-        // Refresh map if it's open
-        if (document.getElementById('mapView').style.display !== 'none') {
-          initMap(_lastData);
-        }
+        if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
       }).catch(() => {
         ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
           document.getElementById(id).innerHTML = '<div class="empty">Instagram unavailable</div>';
@@ -928,6 +1007,13 @@
         document.getElementById('loading').hidden = true;
         btn.disabled = false; btn.textContent = 'Search';
       });
+
+      // Phase 3: fill in followee posts when ready (independent of phase 2)
+      followeePromise.then(r => r ? (r.ok ? r.json() : []) : []).then(posts => {
+        _lastData.followee_posts = posts;
+        renderFolloweePosts(posts);
+        if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
+      }).catch(() => {});
 
     } catch (err) {
       const el = document.getElementById('error');

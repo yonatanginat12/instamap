@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 load_dotenv()
 
-from .instagram import search_instagram  # noqa: E402
+from .instagram import search_followee_posts, search_instagram  # noqa: E402
 from .models import InstagramPost, PlacesResponse, SearchResponse  # noqa: E402
 from .overpass import _geocode, search_osm  # noqa: E402
 
@@ -19,9 +19,10 @@ app = FastAPI(title="Discover")
 
 _ROOT = Path(__file__).parent.parent.parent
 
-# Separate caches for fast places and instagram — 30-min TTL
+# Separate caches — 30-min TTL
 _places_cache: dict[tuple[str, str], tuple[float, PlacesResponse]] = {}
 _ig_cache: dict[tuple[str, str], tuple[float, list[InstagramPost]]] = {}
+_followee_cache: dict[tuple[str, str], tuple[float, list[InstagramPost]]] = {}
 _CACHE_TTL = 1800
 
 
@@ -101,6 +102,27 @@ async def search_instagram_endpoint(
     )
     posts.sort(key=lambda p: p.likes, reverse=True)
     _ig_cache[key] = (time.time(), posts)
+    return posts
+
+
+@app.get("/api/search/followees", response_model=list[InstagramPost])
+async def search_followees_endpoint(
+    location: str = Query(..., min_length=2),
+    ig_username: str = Query(..., min_length=1),
+) -> list[InstagramPost]:
+    """Posts from accounts the user follows, filtered by location. Public accounts only."""
+    key = (ig_username.lower().strip(), location.lower().strip())
+    cached = _followee_cache.get(key)
+    if cached and time.time() - cached[0] < _CACHE_TTL:
+        return cached[1]
+
+    posts, _ = await _with_timeout(
+        search_followee_posts(ig_username, location),
+        timeout=35.0,
+        default=([], []),
+    )
+    posts.sort(key=lambda p: p.likes, reverse=True)
+    _followee_cache[key] = (time.time(), posts)
     return posts
 
 
