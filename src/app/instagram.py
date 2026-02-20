@@ -339,7 +339,7 @@ def _fetch_followee_posts_sync(
     for followee in fallback:
         if len(results) >= 9:
             break
-        hit = _first_match(followee, max_posts=6)
+        hit = _first_match(followee, max_posts=12)
         if hit:
             results.append(hit)
 
