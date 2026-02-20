@@ -32,8 +32,7 @@ def _bootstrap_session() -> None:
 
 _bootstrap_session()
 
-_executor          = ThreadPoolExecutor(max_workers=1)  # hashtag searches
-_followee_executor = ThreadPoolExecutor(max_workers=1)  # followee searches (separate so they don't queue behind hashtag searches)
+_executor = ThreadPoolExecutor(max_workers=1)  # single worker: Instaloader session is not thread-safe
 
 _loader = instaloader.Instaloader(
     download_pictures=False,
@@ -246,13 +245,19 @@ def _fetch_followee_posts_sync(
         return [], [f"Instagram user '{ig_username}' not found: {exc}"]
 
     # ── Pass 1: classify 50 followees using free username / full_name data ──
+    # Skip private accounts immediately — the bot session can't see their posts.
+    # username and full_name come back in the same followee-list response, so
+    # the priority/fallback split costs zero extra API calls.
     priority: list = []
     fallback: list = []
+    skipped_private = 0
     try:
         for followee in itertools.islice(ig_profile.get_followees(), 50):
+            if followee.is_private:
+                skipped_private += 1
+                continue
             uname = followee.username.lower()
             fname = (followee.full_name or "").lower()
-            # Match either the full location name ("tokyo") or its slug ("tokyo")
             if location_lower in uname or location_lower in fname \
                or location_slug in uname or location_slug in fname:
                 priority.append(followee)
@@ -267,45 +272,71 @@ def _fetch_followee_posts_sync(
             ]
 
     logger.info(
-        "Followee pre-filter for '%s': %d priority, %d fallback",
-        location, len(priority), len(fallback),
+        "Followee pre-filter for '%s': %d priority, %d fallback, %d private skipped",
+        location, len(priority), len(fallback), skipped_private,
     )
 
-    # ── Pass 2: check posts, priority accounts first ──
+    # ── Pass 2: check posts — bypass the location detail API ──
+    # Accessing post.location triggers a secondary /explore/locations/{id}/ call
+    # that returns 201 (Instagram challenge) and retries 10+ times, completely
+    # blocking the thread. Instead we read the location name directly from the
+    # raw post node — it carries {id, name, slug} but not lat/lng, which is fine
+    # for text matching. Coordinates are left as None for followee posts.
+    def _raw_location_name(post) -> str:
+        try:
+            loc = post._node.get("location") or {}  # type: ignore[attr-defined]
+            return (loc.get("name") or "").lower()
+        except Exception:
+            return ""
+
     def _first_match(followee, max_posts: int) -> InstagramPost | None:
         try:
-            for post in itertools.islice(followee.get_posts(), max_posts):
-                loc_match = (
-                    post.location and location_lower in post.location.name.lower()
-                ) or (
-                    post.caption and location_lower in post.caption.lower()
-                )
-                if loc_match:
-                    return InstagramPost(
-                        shortcode=post.shortcode,
-                        url=f"https://www.instagram.com/p/{post.shortcode}/",
-                        image_url=post.url,
-                        caption=(post.caption or "")[:300],
-                        likes=post.likes,
-                        timestamp=post.date_utc.isoformat(),
-                        location_name=post.location.name if post.location else None,
-                        username=followee.username,
-                        post_category="followee",
-                        lat=post.location.lat if post.location else None,
-                        lon=post.location.lng if post.location else None,
-                    )
+            posts_iter = followee.get_posts()
         except Exception as exc:
-            logger.debug("Skipping followee %s: %s", followee.username, exc)
+            logger.debug("get_posts failed for %s: %s", followee.username, exc)
+            return None
+
+        for _ in range(max_posts):
+            try:
+                post = next(posts_iter)
+            except StopIteration:
+                break
+            except Exception as exc:
+                logger.debug("post iteration error for %s: %s", followee.username, exc)
+                continue
+
+            try:
+                loc_name = _raw_location_name(post)
+                cap = (post.caption or "").lower()
+                if location_lower not in loc_name and location_lower not in cap:
+                    continue
+                return InstagramPost(
+                    shortcode=post.shortcode,
+                    url=f"https://www.instagram.com/p/{post.shortcode}/",
+                    image_url=post.url,
+                    caption=(post.caption or "")[:300],
+                    likes=post.likes,
+                    timestamp=post.date_utc.isoformat(),
+                    location_name=loc_name or None,
+                    username=followee.username,
+                    post_category="followee",
+                    lat=None,   # coordinates require broken /explore/locations/ API
+                    lon=None,
+                )
+            except Exception as exc:
+                logger.debug("post parse error for %s: %s", followee.username, exc)
+                continue
+
         return None
 
-    for followee in priority:          # name/username hint — check more posts
+    for followee in priority:
         if len(results) >= 9:
             break
         hit = _first_match(followee, max_posts=24)
         if hit:
             results.append(hit)
 
-    for followee in fallback:          # no obvious hint — fewer posts to stay fast
+    for followee in fallback:
         if len(results) >= 9:
             break
         hit = _first_match(followee, max_posts=6)
@@ -320,5 +351,5 @@ async def search_followee_posts(
 ) -> tuple[list[InstagramPost], list[str]]:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        _followee_executor, _fetch_followee_posts_sync, ig_username, location
+        _executor, _fetch_followee_posts_sync, ig_username, location
     )
