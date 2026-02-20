@@ -170,7 +170,10 @@ def _fetch_tag(tag: str, limit: int) -> list[InstagramPost]:
     try:
         hashtag = instaloader.Hashtag.from_name(_loader.context, tag)
         raw = hashtag._metadata()
-        for m in _extract_media_items(raw):
+        items = _extract_media_items(raw)
+        logger.info("Instagram #%s: raw sections=%d, items=%d",
+                    tag, len(raw.get("top", {}).get("sections", [])), len(items))
+        for m in items:
             post = _parse_post(m)
             if post:
                 posts.append(post)
@@ -186,26 +189,25 @@ def _search_sync(location: str) -> tuple[list[InstagramPost], list[str]]:
     if login_err:
         return [], [login_err]
 
-    # Always fetch both categories so the UI can show both sections
-    plan: list[tuple[str, str]] = [
-        *[(t, "eat")   for t in _hashtags_for(location, "eat")[:1]],
-        *[(t, "do")    for t in _hashtags_for(location, "do")[:1]],
-        *[(t, "sleep") for t in _hashtags_for(location, "sleep")[:1]],
-    ]
-
     seen: set[str] = set()
     all_posts: list[InstagramPost] = []
     warnings: list[str] = []
 
-    for tag, cat in plan:
-        fetched = _fetch_tag(tag, limit=9)
-        if not fetched:
-            warnings.append(f"No Instagram results for #{tag}")
-        for post in fetched:
-            if post.shortcode not in seen:
-                seen.add(post.shortcode)
-                post.post_category = cat
-                all_posts.append(post)
+    # Try up to 3 hashtags per category; stop as soon as one returns results
+    for cat in ("eat", "do", "sleep"):
+        tags = _hashtags_for(location, cat)[:3]
+        for tag in tags:
+            fetched = _fetch_tag(tag, limit=9)
+            if fetched:
+                for post in fetched:
+                    if post.shortcode not in seen:
+                        seen.add(post.shortcode)
+                        post.post_category = cat
+                        all_posts.append(post)
+                break  # got results — no need to try next hashtag
+            logger.info("No results for #%s, trying next hashtag", tag)
+        else:
+            warnings.append(f"No Instagram results for {location} ({cat})")
 
     return all_posts, warnings
 
