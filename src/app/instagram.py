@@ -32,7 +32,8 @@ def _bootstrap_session() -> None:
 
 _bootstrap_session()
 
-_executor = ThreadPoolExecutor(max_workers=1)  # single worker to respect rate limits
+_executor          = ThreadPoolExecutor(max_workers=1)  # hashtag searches
+_followee_executor = ThreadPoolExecutor(max_workers=1)  # followee searches (separate so they don't queue behind hashtag searches)
 
 _loader = instaloader.Instaloader(
     download_pictures=False,
@@ -220,12 +221,23 @@ async def search_instagram(
 def _fetch_followee_posts_sync(
     ig_username: str, location: str
 ) -> tuple[list[InstagramPost], list[str]]:
-    """Search recent posts from followed accounts for location. Public accounts only."""
+    """Two-pass search over followed accounts. Public accounts only.
+
+    Pass 1 (free — no extra API calls): collect the first page of followees
+    (~50 accounts). username and full_name come back in the same response, so
+    accounts like @tokyo_eats or "Tokyo Street Food" are identified as
+    priority candidates at zero extra cost.
+
+    Pass 2: fetch posts from priority accounts first (up to 24 posts each),
+    then fallback accounts (up to 6 posts each), stopping once 9 results are
+    collected.
+    """
     login_err = _ensure_login()
     if login_err:
         return [], [login_err]
 
     location_lower = location.lower()
+    location_slug  = _slug(location)   # alphanumeric only, e.g. "telaviv"
     results: list[InstagramPost] = []
 
     try:
@@ -233,43 +245,72 @@ def _fetch_followee_posts_sync(
     except Exception as exc:
         return [], [f"Instagram user '{ig_username}' not found: {exc}"]
 
-    followees_checked = 0
+    # ── Pass 1: classify 50 followees using free username / full_name data ──
+    priority: list = []
+    fallback: list = []
     try:
-        for followee in ig_profile.get_followees():
-            if followees_checked >= 20 or len(results) >= 9:
-                break
-            followees_checked += 1
-            try:
-                for post in itertools.islice(followee.get_posts(), 6):
-                    loc_match = (
-                        post.location and location_lower in post.location.name.lower()
-                    ) or (
-                        post.caption and location_lower in post.caption.lower()
-                    )
-                    if loc_match:
-                        results.append(InstagramPost(
-                            shortcode=post.shortcode,
-                            url=f"https://www.instagram.com/p/{post.shortcode}/",
-                            image_url=post.url,
-                            caption=(post.caption or "")[:300],
-                            likes=post.likes,
-                            timestamp=post.date_utc.isoformat(),
-                            location_name=post.location.name if post.location else None,
-                            username=followee.username,
-                            post_category="followee",
-                            lat=post.location.lat if post.location else None,
-                            lon=post.location.lng if post.location else None,
-                        ))
-                        break  # one match per followee keeps results diverse
-            except Exception as exc:
-                logger.debug("Skipping followee %s: %s", followee.username, exc)
+        for followee in itertools.islice(ig_profile.get_followees(), 50):
+            uname = followee.username.lower()
+            fname = (followee.full_name or "").lower()
+            # Match either the full location name ("tokyo") or its slug ("tokyo")
+            if location_lower in uname or location_lower in fname \
+               or location_slug in uname or location_slug in fname:
+                priority.append(followee)
+            else:
+                fallback.append(followee)
     except Exception as exc:
         logger.warning("Error fetching followees for %s: %s", ig_username, exc)
-        if not results:
+        if not priority and not fallback:
             return [], [
                 f"Could not load following list for '{ig_username}' "
                 f"(account may be private or rate-limited)"
             ]
+
+    logger.info(
+        "Followee pre-filter for '%s': %d priority, %d fallback",
+        location, len(priority), len(fallback),
+    )
+
+    # ── Pass 2: check posts, priority accounts first ──
+    def _first_match(followee, max_posts: int) -> InstagramPost | None:
+        try:
+            for post in itertools.islice(followee.get_posts(), max_posts):
+                loc_match = (
+                    post.location and location_lower in post.location.name.lower()
+                ) or (
+                    post.caption and location_lower in post.caption.lower()
+                )
+                if loc_match:
+                    return InstagramPost(
+                        shortcode=post.shortcode,
+                        url=f"https://www.instagram.com/p/{post.shortcode}/",
+                        image_url=post.url,
+                        caption=(post.caption or "")[:300],
+                        likes=post.likes,
+                        timestamp=post.date_utc.isoformat(),
+                        location_name=post.location.name if post.location else None,
+                        username=followee.username,
+                        post_category="followee",
+                        lat=post.location.lat if post.location else None,
+                        lon=post.location.lng if post.location else None,
+                    )
+        except Exception as exc:
+            logger.debug("Skipping followee %s: %s", followee.username, exc)
+        return None
+
+    for followee in priority:          # name/username hint — check more posts
+        if len(results) >= 9:
+            break
+        hit = _first_match(followee, max_posts=24)
+        if hit:
+            results.append(hit)
+
+    for followee in fallback:          # no obvious hint — fewer posts to stay fast
+        if len(results) >= 9:
+            break
+        hit = _first_match(followee, max_posts=6)
+        if hit:
+            results.append(hit)
 
     return results, []
 
@@ -279,5 +320,5 @@ async def search_followee_posts(
 ) -> tuple[list[InstagramPost], list[str]]:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        _executor, _fetch_followee_posts_sync, ig_username, location
+        _followee_executor, _fetch_followee_posts_sync, ig_username, location
     )
