@@ -300,12 +300,6 @@
     #ig-username:focus { border-color: var(--accent); }
     #ig-username::placeholder { color: #aaa; }
 
-    /* ── Combined Instagram section (full-width, above places grid) ── */
-    #col-instagram {
-      margin-bottom: 1.5rem;
-      padding-bottom: 1.25rem;
-      border-bottom: 2px solid var(--accent-light);
-    }
     .pill-followee { background: #e8f5e9; color: #2e7d32; }
     #ig-summary-text { color: var(--muted); font-size: .78rem; }
 
@@ -368,8 +362,6 @@
       .results-grid { display: block; }
       #col-eat, #col-do, #col-sleep { display: none; }
       #col-eat.mob-active, #col-do.mob-active, #col-sleep.mob-active { display: block; }
-      /* Instagram section: always visible on mobile (above place tabs) */
-      #col-instagram { border-bottom: 1px solid var(--border); margin-bottom: .75rem; }
 
       /* Wider cards on single-column layout */
       .cards { grid-template-columns: 1fr 1fr; }
@@ -451,24 +443,7 @@
         <button class="mob-tab"       data-tab="sleep" onclick="selectMobTab('sleep')">🛏️ Sleep</button>
       </div>
 
-      <!-- Combined Instagram section (followees on top, then hashtag posts) -->
-      <div id="col-instagram">
-        <div class="section-header">
-          <span style="font-size:1.4rem">📷</span><h2>Instagram</h2>
-        </div>
-        <div class="source-block">
-          <div class="source-label">
-            <span class="source-pill pill-ig">Instagram</span>
-            <span id="ig-summary-text"></span>
-          </div>
-          <div class="cards" id="instagram-all-cards"></div>
-          <div class="show-more-wrap" id="instagram-all-more" hidden>
-            <button class="show-more-btn" onclick="showMore('instagram-all')">Show more</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Places grid (OSM only) -->
+      <!-- Places + Instagram grid -->
       <div class="results-grid">
 
         <div id="col-eat">
@@ -476,7 +451,10 @@
             <span style="font-size:1.4rem">🍽️</span><h2>Eat</h2>
           </div>
           <div class="source-block">
-            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="source-label">
+              <span class="source-pill pill-ig">Instagram</span>
+              <span id="ig-summary-text"></span>
+            </div>
             <div class="cards" id="ig-eat-cards"></div>
             <div class="show-more-wrap" id="ig-eat-more" hidden>
               <button class="show-more-btn" onclick="showMore('ig-eat')">Show more</button>
@@ -930,37 +908,30 @@
       <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
       Loading Instagram…
     </div>`;
-    document.getElementById('instagram-all-cards').innerHTML = placeholder;
-    document.getElementById('ig-summary-text').textContent = '';
     ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
       document.getElementById(id).innerHTML = placeholder;
     });
+    document.getElementById('ig-summary-text').textContent = '';
   }
 
-  /* ── Render combined Instagram section (followees on top, then hashtags) ── */
+  /* ── Render eat column with followees on top of hashtag posts ── */
   let _igPosts      = null;   // null = not yet loaded
   let _followeePosts = null;  // null = not requested or not yet loaded
 
-  function renderAllInstagram() {
-    const igPosts       = _igPosts      || [];
+  function renderEatInstagram() {
+    const eatPosts      = (_igPosts || []).filter(p => p.post_category === 'eat');
     const followeePosts = _followeePosts || [];
-    const combined      = [...followeePosts, ...igPosts];
+    const combined      = [...followeePosts, ...eatPosts];
 
-    // Summary line
+    // Summary in eat column source label
     const parts = [];
     if (_followeePosts !== null && followeePosts.length)
       parts.push(`<span class="ig-followee-badge">👥 ${followeePosts.length} from people you follow</span>`);
-    if (igPosts.length)
-      parts.push(`${igPosts.length} from hashtags`);
+    if (eatPosts.length)
+      parts.push(`${eatPosts.length} from hashtags`);
     document.getElementById('ig-summary-text').innerHTML = parts.length ? '&nbsp;' + parts.join(' · ') : '';
 
-    if (!combined.length) {
-      document.getElementById('instagram-all-cards').innerHTML =
-        '<div class="empty">No Instagram results</div>';
-      document.getElementById('instagram-all-more').hidden = true;
-      return;
-    }
-    fillCards('instagram-all-cards', 'instagram-all-more', combined.map(renderIgCard));
+    fillCards('ig-eat-cards', 'ig-eat-more', combined.map(renderIgCard));
   }
 
   /* ── Search ── */
@@ -1018,18 +989,16 @@
       document.getElementById('viewToggle').hidden = false;
       setView('grid');
 
-      // Phase 2: hashtag posts — fill combined top section + per-category columns
+      // Phase 2: hashtag posts — eat column gets followees prepended, do/sleep normal
       igPromise.then(r => r.ok ? r.json() : []).then(posts => {
         _lastData.instagram_posts = posts;
         _igPosts = posts;
-        renderAllInstagram();
-        fillCards('ig-eat-cards',   'ig-eat-more',   posts.filter(p => p.post_category === 'eat').map(renderIgCard));
+        renderEatInstagram();
         fillCards('ig-do-cards',    'ig-do-more',    posts.filter(p => p.post_category === 'do').map(renderIgCard));
         fillCards('ig-sleep-cards', 'ig-sleep-more', posts.filter(p => p.post_category === 'sleep').map(renderIgCard));
         if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
       }).catch(() => {
         _igPosts = [];
-        renderAllInstagram();
         ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
           document.getElementById(id).innerHTML = '<div class="empty">Instagram unavailable</div>';
         });
@@ -1038,13 +1007,13 @@
         btn.disabled = false; btn.textContent = 'Search';
       });
 
-      // Phase 3: followee posts — prepend to combined section when ready
+      // Phase 3: followee posts — prepend to eat column when ready
       followeePromise.then(r => r ? (r.ok ? r.json() : []) : []).then(posts => {
         _lastData.followee_posts = posts;
         _followeePosts = posts;
-        renderAllInstagram();
+        renderEatInstagram();
         if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
-      }).catch(() => { _followeePosts = []; renderAllInstagram(); });
+      }).catch(() => { _followeePosts = []; renderEatInstagram(); });
 
     } catch (err) {
       const el = document.getElementById('error');
