@@ -133,7 +133,7 @@ async def search_followees_endpoint(
 # ── Google Photos OAuth ──────────────────────────────────────────────────────
 
 def _redirect_uri(request: Request) -> str:
-    base = str(request.base_url).rstrip("/")
+    base = str(request.base_url).rstrip("/").replace("http://", "https://", 1)
     return f"{base}/auth/google/callback"
 
 
