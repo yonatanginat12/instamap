@@ -300,13 +300,14 @@
     #ig-username:focus { border-color: var(--accent); }
     #ig-username::placeholder { color: #aaa; }
 
-    /* ── Followees full-width section ── */
-    #col-followees {
+    /* ── Combined Instagram section (full-width, above places grid) ── */
+    #col-instagram {
       margin-bottom: 1.5rem;
       padding-bottom: 1.25rem;
       border-bottom: 2px solid var(--accent-light);
     }
     .pill-followee { background: #e8f5e9; color: #2e7d32; }
+    #ig-summary-text { color: var(--muted); font-size: .78rem; }
 
     /* ── Per-card followee badge ── */
     .ig-followee-badge {
@@ -367,9 +368,8 @@
       .results-grid { display: block; }
       #col-eat, #col-do, #col-sleep { display: none; }
       #col-eat.mob-active, #col-do.mob-active, #col-sleep.mob-active { display: block; }
-      /* Followees section on mobile: shown/hidden via mob-active */
-      #col-followees { border-bottom: none; padding-bottom: 0; margin-bottom: 0; display: none; }
-      #col-followees.mob-active { display: block; }
+      /* Instagram section: always visible on mobile (above place tabs) */
+      #col-instagram { border-bottom: 1px solid var(--border); margin-bottom: .75rem; }
 
       /* Wider cards on single-column layout */
       .cards { grid-template-columns: 1fr 1fr; }
@@ -444,39 +444,36 @@
 
     <!-- ── Grid view ── -->
     <div id="gridView">
-      <!-- Mobile-only category tabs -->
+      <!-- Mobile-only category tabs (places only) -->
       <div class="mob-tabs" id="mobTabs">
-        <button class="mob-tab active" data-tab="eat"      onclick="selectMobTab('eat')">🍽️ Eat</button>
-        <button class="mob-tab"       data-tab="do"       onclick="selectMobTab('do')">🎭 Do</button>
-        <button class="mob-tab"       data-tab="sleep"    onclick="selectMobTab('sleep')">🛏️ Sleep</button>
-        <button class="mob-tab"       data-tab="followee" onclick="selectMobTab('followee')" id="mobFolloweeTab" hidden>👥 You</button>
+        <button class="mob-tab active" data-tab="eat"   onclick="selectMobTab('eat')">🍽️ Eat</button>
+        <button class="mob-tab"       data-tab="do"    onclick="selectMobTab('do')">🎭 Do</button>
+        <button class="mob-tab"       data-tab="sleep" onclick="selectMobTab('sleep')">🛏️ Sleep</button>
       </div>
-      <!-- Followees section — only shown when ig_username is set and results arrive -->
-      <div id="col-followees" hidden>
+
+      <!-- Combined Instagram section (followees on top, then hashtag posts) -->
+      <div id="col-instagram">
         <div class="section-header">
-          <span style="font-size:1.4rem">👥</span><h2>From people you follow</h2>
+          <span style="font-size:1.4rem">📷</span><h2>Instagram</h2>
         </div>
         <div class="source-block">
-          <div class="source-label"><span class="source-pill pill-followee">Instagram · Your followees</span></div>
-          <div class="cards" id="followee-cards"></div>
-          <div class="show-more-wrap" id="followee-more" hidden>
-            <button class="show-more-btn" onclick="showMore('followee')">Show more</button>
+          <div class="source-label">
+            <span class="source-pill pill-ig">Instagram</span>
+            <span id="ig-summary-text"></span>
+          </div>
+          <div class="cards" id="instagram-all-cards"></div>
+          <div class="show-more-wrap" id="instagram-all-more" hidden>
+            <button class="show-more-btn" onclick="showMore('instagram-all')">Show more</button>
           </div>
         </div>
       </div>
 
+      <!-- Places grid (OSM only) -->
       <div class="results-grid">
 
         <div id="col-eat">
           <div class="section-header">
             <span style="font-size:1.4rem">🍽️</span><h2>Eat</h2>
-          </div>
-          <div class="source-block">
-            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
-            <div class="cards" id="ig-eat-cards"></div>
-            <div class="show-more-wrap" id="ig-eat-more" hidden>
-              <button class="show-more-btn" onclick="showMore('ig-eat')">Show more</button>
-            </div>
           </div>
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
@@ -492,13 +489,6 @@
             <span style="font-size:1.4rem">🎭</span><h2>Do</h2>
           </div>
           <div class="source-block">
-            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
-            <div class="cards" id="ig-do-cards"></div>
-            <div class="show-more-wrap" id="ig-do-more" hidden>
-              <button class="show-more-btn" onclick="showMore('ig-do')">Show more</button>
-            </div>
-          </div>
-          <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
             <div class="cards" id="osm-do-cards"></div>
             <div class="show-more-wrap" id="osm-do-more" hidden>
@@ -510,13 +500,6 @@
         <div id="col-sleep">
           <div class="section-header">
             <span style="font-size:1.4rem">🛏️</span><h2>Sleep</h2>
-          </div>
-          <div class="source-block">
-            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
-            <div class="cards" id="ig-sleep-cards"></div>
-            <div class="show-more-wrap" id="ig-sleep-more" hidden>
-              <button class="show-more-btn" onclick="showMore('ig-sleep')">Show more</button>
-            </div>
           </div>
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
@@ -584,7 +567,7 @@
 
   /* ── Mobile category tabs ── */
   function selectMobTab(cat) {
-    ['eat','do','sleep','followee'].forEach(c => {
+    ['eat','do','sleep'].forEach(c => {
       const col = document.getElementById(`col-${c}`);
       if (col) col.classList.toggle('mob-active', c === cat);
       const btn = document.querySelector(`#mobTabs [data-tab="${c}"]`);
@@ -922,28 +905,38 @@
 
   /* ── Instagram loading placeholder ── */
   function showIgLoading() {
-    const placeholder = `<div class="empty" style="padding:1rem">
-      <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
-      Loading Instagram…
-    </div>`;
-    ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
-      document.getElementById(id).innerHTML = placeholder;
-    });
+    document.getElementById('instagram-all-cards').innerHTML = `
+      <div class="empty" style="padding:1rem">
+        <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
+        Loading Instagram…
+      </div>`;
+    document.getElementById('ig-summary-text').textContent = '';
   }
 
-  /* ── Render followee posts ── */
-  function renderFolloweePosts(posts) {
-    const section = document.getElementById('col-followees');
-    const mobTab  = document.getElementById('mobFolloweeTab');
-    if (!posts.length) {
-      section.hidden = true;
-      mobTab.hidden  = true;
+  /* ── Render combined Instagram section (followees on top, then hashtags) ── */
+  let _igPosts      = null;   // null = not yet loaded
+  let _followeePosts = null;  // null = not requested or not yet loaded
+
+  function renderAllInstagram() {
+    const igPosts       = _igPosts      || [];
+    const followeePosts = _followeePosts || [];
+    const combined      = [...followeePosts, ...igPosts];
+
+    // Summary line
+    const parts = [];
+    if (_followeePosts !== null && followeePosts.length)
+      parts.push(`<span class="ig-followee-badge">👥 ${followeePosts.length} from people you follow</span>`);
+    if (igPosts.length)
+      parts.push(`${igPosts.length} from hashtags`);
+    document.getElementById('ig-summary-text').innerHTML = parts.length ? '&nbsp;' + parts.join(' · ') : '';
+
+    if (!combined.length) {
+      document.getElementById('instagram-all-cards').innerHTML =
+        '<div class="empty">No Instagram results</div>';
+      document.getElementById('instagram-all-more').hidden = true;
       return;
     }
-    section.hidden = false;
-    mobTab.hidden  = false;
-    document.getElementById('legendFollowee').hidden = false;
-    fillCards('followee-cards', 'followee-more', posts.map(renderIgCard));
+    fillCards('instagram-all-cards', 'instagram-all-more', combined.map(renderIgCard));
   }
 
   /* ── Search ── */
@@ -960,10 +953,9 @@
     document.getElementById('error').hidden    = true;
     document.getElementById('viewToggle').hidden = true;
 
-    // Reset followees section & legend
-    document.getElementById('col-followees').hidden = true;
-    document.getElementById('mobFolloweeTab').hidden = true;
-    document.getElementById('legendFollowee').hidden = true;
+    // Reset Instagram state
+    _igPosts = null;
+    _followeePosts = igUsername ? null : [];
 
     // Reset map on new search
     if (_map) { _markers.forEach(m => m.remove()); _markers = []; }
@@ -1002,28 +994,27 @@
       document.getElementById('viewToggle').hidden = false;
       setView('grid');
 
-      // Phase 2: fill in Instagram hashtag posts when ready
+      // Phase 2: hashtag posts — render combined section when ready
       igPromise.then(r => r.ok ? r.json() : []).then(posts => {
         _lastData.instagram_posts = posts;
-        fillCards('ig-eat-cards',   'ig-eat-more',   posts.filter(p => p.post_category === 'eat').map(renderIgCard));
-        fillCards('ig-do-cards',    'ig-do-more',    posts.filter(p => p.post_category === 'do').map(renderIgCard));
-        fillCards('ig-sleep-cards', 'ig-sleep-more', posts.filter(p => p.post_category === 'sleep').map(renderIgCard));
+        _igPosts = posts;
+        renderAllInstagram();
         if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
       }).catch(() => {
-        ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
-          document.getElementById(id).innerHTML = '<div class="empty">Instagram unavailable</div>';
-        });
+        _igPosts = [];
+        renderAllInstagram();
       }).finally(() => {
         document.getElementById('loading').hidden = true;
         btn.disabled = false; btn.textContent = 'Search';
       });
 
-      // Phase 3: fill in followee posts when ready (independent of phase 2)
+      // Phase 3: followee posts — prepend to combined section when ready
       followeePromise.then(r => r ? (r.ok ? r.json() : []) : []).then(posts => {
         _lastData.followee_posts = posts;
-        renderFolloweePosts(posts);
+        _followeePosts = posts;
+        renderAllInstagram();
         if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
-      }).catch(() => {});
+      }).catch(() => { _followeePosts = []; renderAllInstagram(); });
 
     } catch (err) {
       const el = document.getElementById('error');
