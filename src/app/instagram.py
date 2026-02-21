@@ -45,13 +45,33 @@ _loader = instaloader.Instaloader(
     request_timeout=15,
 )
 
+# Separate loader + executor for followee searches.
+# max_connection_attempts=1 makes it raise immediately on 429 instead of
+# sleeping 30 minutes, preventing it from blocking the executor thread.
+_followee_executor = ThreadPoolExecutor(max_workers=1)
+_followee_loader = instaloader.Instaloader(
+    download_pictures=False,
+    download_videos=False,
+    download_video_thumbnails=False,
+    download_geotags=False,
+    save_metadata=False,
+    compress_json=False,
+    quiet=True,
+    request_timeout=15,
+    max_connection_attempts=1,
+)
+
 _logged_in = False
+_followee_logged_in = False
 
 
-def _ensure_login() -> str | None:
+def _ensure_login(loader=None, flag_attr: str = "_logged_in") -> str | None:
     """Load session from file (preferred) or fall back to password login."""
-    global _logged_in
-    if _logged_in:
+    global _logged_in, _followee_logged_in
+    if loader is None:
+        loader = _loader
+    logged_in = _followee_logged_in if loader is _followee_loader else _logged_in
+    if logged_in:
         return None
     username = os.getenv("INSTAGRAM_USERNAME", "").strip()
     if not username:
@@ -59,10 +79,13 @@ def _ensure_login() -> str | None:
 
     # Preferred: load browser-imported session (avoids 403 on hashtag endpoints)
     try:
-        _loader.load_session_from_file(username)
-        verified = _loader.test_login()
+        loader.load_session_from_file(username)
+        verified = loader.test_login()
         if verified:
-            _logged_in = True
+            if loader is _followee_loader:
+                _followee_logged_in = True
+            else:
+                _logged_in = True
             logger.info("Instaloader session loaded for %s", verified)
             return None
         logger.warning("Session file invalid, falling back to password login")
@@ -80,9 +103,12 @@ def _ensure_login() -> str | None:
             "(requires Firefox logged into Instagram)"
         )
     try:
-        _loader.login(username, password)
-        _loader.save_session_to_file()
-        _logged_in = True
+        loader.login(username, password)
+        loader.save_session_to_file()
+        if loader is _followee_loader:
+            _followee_logged_in = True
+        else:
+            _logged_in = True
         logger.info("Instaloader logged in as %s", username)
         return None
     except Exception as exc:
@@ -233,7 +259,7 @@ def _fetch_followee_posts_sync(
     then fallback accounts (up to 6 posts each), stopping once 9 results are
     collected.
     """
-    login_err = _ensure_login()
+    login_err = _ensure_login(_followee_loader)
     if login_err:
         return [], [login_err]
 
@@ -242,7 +268,7 @@ def _fetch_followee_posts_sync(
     results: list[InstagramPost] = []
 
     try:
-        ig_profile = instaloader.Profile.from_username(_loader.context, ig_username)
+        ig_profile = instaloader.Profile.from_username(_followee_loader.context, ig_username)
     except Exception as exc:
         return [], [f"Instagram user '{ig_username}' not found: {exc}"]
 
@@ -353,5 +379,5 @@ async def search_followee_posts(
 ) -> tuple[list[InstagramPost], list[str]]:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        _executor, _fetch_followee_posts_sync, ig_username, location
+        _followee_executor, _fetch_followee_posts_sync, ig_username, location
     )
