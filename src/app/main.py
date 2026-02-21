@@ -178,33 +178,24 @@ async def google_photos_endpoint(
 
 @app.get("/api/photos/google/debug")
 async def google_photos_debug(access_token: str = Query(...)):
-    """Raw Google Photos API responses for debugging."""
+    """Raw Drive API (spaces=photos) response for debugging."""
     import httpx as _httpx
     headers = {"Authorization": f"Bearer {access_token}"}
-    out = {}
-    for endpoint in ("albums", "sharedAlbums"):
-        try:
-            r = _httpx.get(
-                f"https://photoslibrary.googleapis.com/v1/{endpoint}",
-                headers=headers, params={"pageSize": 10}, timeout=15,
-            )
-            out[endpoint] = {"status": r.status_code, "body": r.json()}
-        except Exception as exc:
-            out[endpoint] = {"error": str(exc)}
     try:
-        r = _httpx.post(
-            "https://photoslibrary.googleapis.com/v1/mediaItems:search",
+        r = _httpx.get(
+            "https://www.googleapis.com/drive/v3/files",
             headers=headers,
-            json={"pageSize": 5, "filters": {
-                "contentFilter": {"includedContentCategories": ["TRAVEL", "LANDMARKS"]},
-                "includeArchivedMedia": True,
-            }},
+            params={
+                "spaces": "photos",
+                "q": "mimeType contains 'image/'",
+                "fields": "files(id,name,description,thumbnailLink,webViewLink,imageMediaMetadata)",
+                "pageSize": 5,
+            },
             timeout=15,
         )
-        out["mediaItems_travel"] = {"status": r.status_code, "body": r.json()}
+        return {"status": r.status_code, "body": r.json()}
     except Exception as exc:
-        out["mediaItems_travel"] = {"error": str(exc)}
-    return out
+        return {"error": str(exc)}
 
 
 # Legacy endpoint — kept for backwards compat
