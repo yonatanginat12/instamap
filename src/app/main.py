@@ -176,6 +176,37 @@ async def google_photos_endpoint(
     return await search_google_photos(access_token, location)
 
 
+@app.get("/api/photos/google/debug")
+async def google_photos_debug(access_token: str = Query(...)):
+    """Raw Google Photos API responses for debugging."""
+    import httpx as _httpx
+    headers = {"Authorization": f"Bearer {access_token}"}
+    out = {}
+    for endpoint in ("albums", "sharedAlbums"):
+        try:
+            r = _httpx.get(
+                f"https://photoslibrary.googleapis.com/v1/{endpoint}",
+                headers=headers, params={"pageSize": 10}, timeout=15,
+            )
+            out[endpoint] = {"status": r.status_code, "body": r.json()}
+        except Exception as exc:
+            out[endpoint] = {"error": str(exc)}
+    try:
+        r = _httpx.post(
+            "https://photoslibrary.googleapis.com/v1/mediaItems:search",
+            headers=headers,
+            json={"pageSize": 5, "filters": {
+                "contentFilter": {"includedContentCategories": ["TRAVEL", "LANDMARKS"]},
+                "includeArchivedMedia": True,
+            }},
+            timeout=15,
+        )
+        out["mediaItems_travel"] = {"status": r.status_code, "body": r.json()}
+    except Exception as exc:
+        out["mediaItems_travel"] = {"error": str(exc)}
+    return out
+
+
 # Legacy endpoint — kept for backwards compat
 @app.get("/api/search", response_model=SearchResponse)
 async def search(
