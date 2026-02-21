@@ -27,15 +27,39 @@
       min-height: 100vh;
     }
 
-    /* ── Header ── */
+    /* ── Header — two states: landing (centered) and searched (compact top) ── */
     header {
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 2rem 1.5rem 1.25rem;
+      border-bottom: 1px solid transparent;
+      padding: 0 1.5rem 1.25rem;
       text-align: center;
+      display: flex; flex-direction: column; align-items: center;
+      transition: border-color .4s ease;
     }
-    header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -.5px; }
-    header p  { color: var(--muted); margin-top: .3rem; font-size: .95rem; }
+    body.searched header { border-bottom-color: var(--border); }
+
+    /* Spacer that collapses on search, centering content on landing */
+    #header-spacer {
+      height: calc(40vh - 70px);
+      min-height: 1rem;
+      flex-shrink: 0;
+      transition: height .55s cubic-bezier(.4,0,.2,1), min-height .55s cubic-bezier(.4,0,.2,1);
+    }
+    body.searched #header-spacer { height: 0; min-height: 0; }
+
+    header h1 {
+      font-size: 3.5rem; font-weight: 800; letter-spacing: -2px;
+      transition: font-size .5s cubic-bezier(.4,0,.2,1), letter-spacing .5s;
+    }
+    body.searched header h1 { font-size: 2rem; letter-spacing: -.5px; }
+
+    #header-subtitle {
+      color: var(--muted); font-size: .95rem;
+      margin: .4rem 0 .5rem;
+      max-height: 2rem; overflow: hidden; opacity: 1;
+      transition: max-height .45s cubic-bezier(.4,0,.2,1), opacity .3s ease, margin .45s;
+    }
+    body.searched #header-subtitle { max-height: 0; opacity: 0; margin: 0; }
 
     #searchForm {
       display: flex; flex-wrap: wrap; gap: .75rem;
@@ -332,14 +356,14 @@
 
     /* ── Mobile breakpoint ── */
     @media (max-width: 600px) {
-      /* Sticky compact header */
-      header {
+      /* Sticky compact header — only after search */
+      body.searched header {
         position: sticky; top: 0; z-index: 200;
         padding: .75rem 1rem .65rem;
         box-shadow: 0 2px 8px rgba(0,0,0,.07);
       }
-      header h1 { font-size: 1.4rem; }
-      header p  { display: none; }
+      body.searched header h1 { font-size: 1.4rem; }
+      #header-subtitle { display: none; }
       #searchForm { margin-top: .6rem; gap: .5rem; flex-wrap: nowrap; }
       /* 16px prevents iOS auto-zoom on focus */
       #location { font-size: 16px; min-width: 0; flex: 1 1 0; }
@@ -397,8 +421,9 @@
 <body>
 
 <header>
+  <div id="header-spacer"></div>
   <h1>Discover</h1>
-  <p>Explore Instagram posts &amp; places for any location</p>
+  <p id="header-subtitle">Explore Instagram posts &amp; places for any location</p>
   <form id="searchForm">
     <input id="location" type="text" placeholder="e.g. Tel Aviv, Paris, New York…" autocomplete="off" required />
     <span class="ig-tip" tabindex="0">
@@ -940,6 +965,8 @@
     const location   = document.getElementById('location').value.trim();
     const igUsername = document.getElementById('ig-username').value.trim();
     if (!location) return;
+
+    document.body.classList.add('searched');
 
     const btn = document.getElementById('searchBtn');
     btn.disabled = true; btn.textContent = 'Searching…';
