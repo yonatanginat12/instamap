@@ -62,17 +62,19 @@
     body.searched #header-subtitle { max-height: 0; opacity: 0; margin: 0; }
 
     #searchForm {
-      display: flex; flex-wrap: wrap; gap: .75rem;
+      display: flex; align-items: center; gap: .5rem;
       justify-content: center; margin-top: 1.25rem;
+      width: 100%; max-width: 560px;
     }
     #location {
-      flex: 1 1 280px; max-width: 420px;
+      flex: 1 1 0; min-width: 0;
       padding: .65rem 1rem; border: 1.5px solid var(--border);
       border-radius: 10px; font-size: 1rem; outline: none;
       transition: border-color .2s;
     }
     #location:focus { border-color: var(--accent); }
     #searchBtn {
+      flex-shrink: 0;
       padding: .65rem 1.6rem; background: var(--accent); color: #fff;
       border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
       cursor: pointer; transition: opacity .15s;
@@ -83,7 +85,7 @@
       background: none; border: none; color: var(--accent);
       font-size: .85rem; font-weight: 500; cursor: pointer;
       display: flex; align-items: center; gap: .3rem;
-      margin-top: .6rem; opacity: .85; transition: opacity .15s;
+      margin-top: .5rem; opacity: .85; transition: opacity .15s;
     }
     #locateBtn:hover { opacity: 1; text-decoration: underline; }
     #locateBtn:disabled { opacity: .4; cursor: not-allowed; text-decoration: none; }
@@ -308,10 +310,14 @@
     .empty { text-align: center; padding: 1.5rem .5rem; color: var(--muted); font-size: .85rem; }
     [hidden] { display: none !important; }
 
-    /* ── Personalize (followees) input ── */
+    /* ── Search sub-row (locate + username, below the search bar) ── */
+    .search-sub-row {
+      display: flex; align-items: center; gap: .6rem;
+      justify-content: center; margin-top: .55rem; flex-wrap: wrap;
+    }
+    .search-sub-sep { color: var(--border); font-size: 1rem; }
     .personalize-row {
-      display: flex; align-items: center; gap: .45rem;
-      justify-content: center; margin-top: .55rem;
+      display: flex; align-items: center; gap: .4rem;
     }
     .personalize-row label {
       font-size: .82rem; color: var(--muted); white-space: nowrap;
@@ -364,13 +370,14 @@
       }
       body.searched header h1 { font-size: 1.4rem; }
       #header-subtitle { display: none; }
-      #searchForm { margin-top: .6rem; gap: .5rem; flex-wrap: nowrap; }
+      #searchForm { margin-top: .6rem; gap: .4rem; width: 100%; }
       /* 16px prevents iOS auto-zoom on focus */
-      #location { font-size: 16px; min-width: 0; flex: 1 1 0; }
+      #location { font-size: 16px; }
       #searchBtn { padding: .65rem 1rem; font-size: .92rem; white-space: nowrap; }
-      #locateBtn { margin-top: .5rem; font-size: .82rem; }
+      .search-sub-row { gap: .4rem; }
+      #locateBtn { font-size: .82rem; margin-top: 0; }
       /* 16px prevents iOS auto-zoom on the personalize input too */
-      #ig-username { font-size: 16px; width: 160px; }
+      #ig-username { font-size: 16px; width: 140px; }
       .personalize-row label { font-size: .78rem; }
 
       /* Tooltip: anchor to left edge on mobile so it doesn't overflow */
@@ -426,6 +433,7 @@
   <p id="header-subtitle">Explore Instagram posts &amp; places for any location</p>
   <form id="searchForm">
     <input id="location" type="text" placeholder="e.g. Tel Aviv, Paris, New York…" autocomplete="off" required />
+    <button id="searchBtn" type="submit">Search</button>
     <span class="ig-tip" tabindex="0">
       <span class="ig-tip-icon">?</span>
       <div class="ig-tip-box">
@@ -436,12 +444,14 @@
         <em>Spaces and special characters are removed from the city name.</em>
       </div>
     </span>
-    <button id="searchBtn" type="submit">Search</button>
   </form>
-  <button id="locateBtn" type="button">📍 Use my current location</button>
-  <div class="personalize-row">
-    <label for="ig-username">👥</label>
-    <input id="ig-username" type="text" placeholder="Your Instagram username (optional)" autocomplete="username" />
+  <div class="search-sub-row">
+    <button id="locateBtn" type="button">📍 Use my current location</button>
+    <span class="search-sub-sep">·</span>
+    <div class="personalize-row">
+      <label for="ig-username">👥</label>
+      <input id="ig-username" type="text" placeholder="Your Instagram username (optional)" autocomplete="username" />
+    </div>
   </div>
   <div class="view-toggle" id="viewToggle" hidden>
     <button class="vbtn active" id="btnGrid" onclick="setView('grid')">⊞ Grid</button>
