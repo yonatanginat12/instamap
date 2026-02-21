@@ -91,26 +91,54 @@ def _parse_photo(item: dict, album_title: str | None = None) -> GooglePhoto | No
         return None
 
 
+def _list_all_albums(headers: dict, endpoint: str) -> list[dict]:
+    """Paginate through all albums (user or shared) and return the full list."""
+    albums: list[dict] = []
+    page_token: str | None = None
+    for _ in range(10):  # max 10 pages × 50 = 500 albums
+        params: dict = {"pageSize": 50}
+        if page_token:
+            params["pageToken"] = page_token
+        try:
+            r = httpx.get(f"{_API_BASE}/{endpoint}", headers=headers, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+        except Exception as exc:
+            logger.warning("Google Photos %s page failed: %s", endpoint, exc)
+            break
+        key = "sharedAlbums" if endpoint == "sharedAlbums" else "albums"
+        albums.extend(data.get(key, []))
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+    return albums
+
+
 def _fetch_sync(access_token: str, location: str) -> list[GooglePhoto]:
     headers = {"Authorization": f"Bearer {access_token}"}
     location_lower = location.lower()
     photos: list[GooglePhoto] = []
 
-    # ── Pass 1: look for albums whose title contains the location name ──
-    # Google auto-creates trip albums named after locations, e.g. "Bangkok 2024"
-    try:
-        r = httpx.get(
-            f"{_API_BASE}/albums",
-            headers=headers,
-            params={"pageSize": 50},
-            timeout=15,
-        )
-        r.raise_for_status()
-        albums = r.json().get("albums", [])
-        matching = [a for a in albums if location_lower in a.get("title", "").lower()]
-        logger.info("Google Photos: %d albums, %d match '%s'", len(albums), len(matching), location)
+    # ── Pass 1: search user albums + shared/trip albums by title ──
+    all_albums: list[dict] = []
+    for endpoint in ("albums", "sharedAlbums"):
+        all_albums.extend(_list_all_albums(headers, endpoint))
 
-        for album in matching[:3]:
+    # Deduplicate by id
+    seen_ids: set[str] = set()
+    unique_albums = [a for a in all_albums if not (a["id"] in seen_ids or seen_ids.add(a["id"]))]  # type: ignore[func-returns-value]
+
+    matching = [a for a in unique_albums if location_lower in a.get("title", "").lower()]
+    logger.info(
+        "Google Photos: %d total albums, %d match '%s'",
+        len(unique_albums), len(matching), location,
+    )
+    if unique_albums:
+        sample = [a.get("title", "") for a in unique_albums[:20]]
+        logger.info("Google Photos album sample: %s", sample)
+
+    for album in matching[:5]:
+        try:
             r2 = httpx.post(
                 f"{_API_BASE}/mediaItems:search",
                 headers=headers,
@@ -122,10 +150,10 @@ def _fetch_sync(access_token: str, location: str) -> list[GooglePhoto]:
                 p = _parse_photo(item, album.get("title"))
                 if p:
                     photos.append(p)
-            if len(photos) >= 12:
-                break
-    except Exception as exc:
-        logger.warning("Google Photos album fetch failed: %s", exc)
+        except Exception as exc:
+            logger.warning("Google Photos album '%s' fetch failed: %s", album.get("title"), exc)
+        if len(photos) >= 12:
+            break
 
     # ── Pass 2: fall back to LANDMARKS / TRAVEL categories ──
     if not photos:
@@ -134,7 +162,7 @@ def _fetch_sync(access_token: str, location: str) -> list[GooglePhoto]:
                 f"{_API_BASE}/mediaItems:search",
                 headers=headers,
                 json={
-                    "pageSize": 25,
+                    "pageSize": 50,
                     "filters": {
                         "contentFilter": {
                             "includedContentCategories": ["LANDMARKS", "CITYSCAPES", "TRAVEL"]
