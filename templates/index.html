@@ -476,6 +476,13 @@
             <span style="font-size:1.4rem">🍽️</span><h2>Eat</h2>
           </div>
           <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="cards" id="ig-eat-cards"></div>
+            <div class="show-more-wrap" id="ig-eat-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-eat')">Show more</button>
+            </div>
+          </div>
+          <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
             <div class="cards" id="osm-eat-cards"></div>
             <div class="show-more-wrap" id="osm-eat-more" hidden>
@@ -489,6 +496,13 @@
             <span style="font-size:1.4rem">🎭</span><h2>Do</h2>
           </div>
           <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="cards" id="ig-do-cards"></div>
+            <div class="show-more-wrap" id="ig-do-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-do')">Show more</button>
+            </div>
+          </div>
+          <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
             <div class="cards" id="osm-do-cards"></div>
             <div class="show-more-wrap" id="osm-do-more" hidden>
@@ -500,6 +514,13 @@
         <div id="col-sleep">
           <div class="section-header">
             <span style="font-size:1.4rem">🛏️</span><h2>Sleep</h2>
+          </div>
+          <div class="source-block">
+            <div class="source-label"><span class="source-pill pill-ig">Instagram</span></div>
+            <div class="cards" id="ig-sleep-cards"></div>
+            <div class="show-more-wrap" id="ig-sleep-more" hidden>
+              <button class="show-more-btn" onclick="showMore('ig-sleep')">Show more</button>
+            </div>
           </div>
           <div class="source-block">
             <div class="source-label"><span class="source-pill pill-osm">OpenStreetMap</span></div>
@@ -905,12 +926,15 @@
 
   /* ── Instagram loading placeholder ── */
   function showIgLoading() {
-    document.getElementById('instagram-all-cards').innerHTML = `
-      <div class="empty" style="padding:1rem">
-        <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
-        Loading Instagram…
-      </div>`;
+    const placeholder = `<div class="empty" style="padding:1rem">
+      <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
+      Loading Instagram…
+    </div>`;
+    document.getElementById('instagram-all-cards').innerHTML = placeholder;
     document.getElementById('ig-summary-text').textContent = '';
+    ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
+      document.getElementById(id).innerHTML = placeholder;
+    });
   }
 
   /* ── Render combined Instagram section (followees on top, then hashtags) ── */
@@ -994,15 +1018,21 @@
       document.getElementById('viewToggle').hidden = false;
       setView('grid');
 
-      // Phase 2: hashtag posts — render combined section when ready
+      // Phase 2: hashtag posts — fill combined top section + per-category columns
       igPromise.then(r => r.ok ? r.json() : []).then(posts => {
         _lastData.instagram_posts = posts;
         _igPosts = posts;
         renderAllInstagram();
+        fillCards('ig-eat-cards',   'ig-eat-more',   posts.filter(p => p.post_category === 'eat').map(renderIgCard));
+        fillCards('ig-do-cards',    'ig-do-more',    posts.filter(p => p.post_category === 'do').map(renderIgCard));
+        fillCards('ig-sleep-cards', 'ig-sleep-more', posts.filter(p => p.post_category === 'sleep').map(renderIgCard));
         if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
       }).catch(() => {
         _igPosts = [];
         renderAllInstagram();
+        ['ig-eat-cards','ig-do-cards','ig-sleep-cards'].forEach(id => {
+          document.getElementById(id).innerHTML = '<div class="empty">Instagram unavailable</div>';
+        });
       }).finally(() => {
         document.getElementById('loading').hidden = true;
         btn.disabled = false; btn.textContent = 'Search';
