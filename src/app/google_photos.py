@@ -117,78 +117,84 @@ def _list_all_albums(headers: dict, endpoint: str) -> list[dict]:
 def _fetch_sync(access_token: str, location: str) -> list[GooglePhoto]:
     headers = {"Authorization": f"Bearer {access_token}"}
     location_lower = location.lower()
-    photos: list[GooglePhoto] = []
+    seen: set[str] = set()
+    album_photos: list[GooglePhoto] = []
+    travel_photos: list[GooglePhoto] = []
 
     # ── Pass 1: search user albums + shared/trip albums by title ──
     all_albums: list[dict] = []
     for endpoint in ("albums", "sharedAlbums"):
         all_albums.extend(_list_all_albums(headers, endpoint))
 
-    # Deduplicate by id
     seen_ids: set[str] = set()
     unique_albums = [a for a in all_albums if not (a["id"] in seen_ids or seen_ids.add(a["id"]))]  # type: ignore[func-returns-value]
 
     matching = [a for a in unique_albums if location_lower in a.get("title", "").lower()]
     logger.info(
-        "Google Photos: %d total albums, %d match '%s'",
+        "Google Photos: %d total albums, %d match '%s'. Sample: %s",
         len(unique_albums), len(matching), location,
+        [a.get("title", "") for a in unique_albums[:15]],
     )
-    if unique_albums:
-        sample = [a.get("title", "") for a in unique_albums[:20]]
-        logger.info("Google Photos album sample: %s", sample)
 
     for album in matching[:5]:
         try:
-            r2 = httpx.post(
+            r = httpx.post(
                 f"{_API_BASE}/mediaItems:search",
                 headers=headers,
                 json={"albumId": album["id"], "pageSize": 25},
                 timeout=15,
             )
-            r2.raise_for_status()
-            for item in r2.json().get("mediaItems", []):
+            r.raise_for_status()
+            for item in r.json().get("mediaItems", []):
                 p = _parse_photo(item, album.get("title"))
-                if p:
-                    photos.append(p)
+                if p and p.id not in seen:
+                    seen.add(p.id)
+                    album_photos.append(p)
         except Exception as exc:
-            logger.warning("Google Photos album '%s' fetch failed: %s", album.get("title"), exc)
-        if len(photos) >= 12:
-            break
+            logger.warning("Google Photos album '%s' failed: %s", album.get("title"), exc)
 
-    # ── Pass 2: fall back to content categories (not location-specific) ──
-    if not photos:
-        for categories in (
-            ["LANDMARKS", "CITYSCAPES"],
-            ["TRAVEL"],
-            ["LANDSCAPES", "ARCHITECTURE"],
-        ):
-            try:
-                r = httpx.post(
-                    f"{_API_BASE}/mediaItems:search",
-                    headers=headers,
-                    json={
-                        "pageSize": 50,
-                        "filters": {
-                            "contentFilter": {"includedContentCategories": categories},
-                            "includeArchivedMedia": True,
-                        },
+    # ── Pass 2: fetch all travel/landmark photos, prioritise ones that mention the location ──
+    try:
+        r = httpx.post(
+            f"{_API_BASE}/mediaItems:search",
+            headers=headers,
+            json={
+                "pageSize": 100,
+                "filters": {
+                    "contentFilter": {
+                        "includedContentCategories": [
+                            "LANDMARKS", "CITYSCAPES", "TRAVEL",
+                            "LANDSCAPES", "ARCHITECTURE",
+                        ]
                     },
-                    timeout=15,
-                )
-                r.raise_for_status()
-                for item in r.json().get("mediaItems", []):
-                    p = _parse_photo(item)
-                    if p:
-                        photos.append(p)
-                logger.info(
-                    "Google Photos category %s for '%s': %d photos", categories, location, len(photos)
-                )
-                if photos:
-                    break
-            except Exception as exc:
-                logger.warning("Google Photos category %s fetch failed: %s", categories, exc)
+                    "includeArchivedMedia": True,
+                },
+            },
+            timeout=20,
+        )
+        r.raise_for_status()
+        for item in r.json().get("mediaItems", []):
+            p = _parse_photo(item)
+            if p and p.id not in seen:
+                seen.add(p.id)
+                travel_photos.append(p)
+        logger.info("Google Photos travel pool: %d photos", len(travel_photos))
+    except Exception as exc:
+        logger.warning("Google Photos travel fetch failed: %s", exc)
 
-    return photos[:12]
+    # Sort travel photos: those whose description/filename mentions the location come first
+    def _mentions(p: GooglePhoto) -> bool:
+        return location_lower in (p.description + " " + (p.album_title or "")).lower()
+
+    location_matched = [p for p in travel_photos if _mentions(p)]
+    rest             = [p for p in travel_photos if not _mentions(p)]
+    logger.info(
+        "Google Photos: %d album, %d description-matched travel, %d other travel",
+        len(album_photos), len(location_matched), len(rest),
+    )
+
+    combined = album_photos + location_matched + rest
+    return combined[:12]
 
 
 async def search_google_photos(access_token: str, location: str) -> list[GooglePhoto]:
