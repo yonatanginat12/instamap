@@ -53,6 +53,15 @@ class PlacesResponse(BaseModel):
     warnings: list[str] = []
 
 
+class GooglePhoto(BaseModel):
+    id: str
+    url: str                    # baseUrl=w800 — valid ~1 hour
+    description: str = ""
+    timestamp: str = ""
+    album_title: str | None = None
+    product_url: str = ""
+
+
 class SearchResponse(BaseModel):
     location: str
     category: str

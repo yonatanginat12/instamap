@@ -339,6 +339,32 @@
     .pill-followee { background: #e8f5e9; color: #2e7d32; }
     #ig-summary-text { color: var(--muted); font-size: .78rem; }
 
+    /* ── Google Photos ── */
+    .pill-gp { background: #e8f0fe; color: #1a73e8; }
+    #gpConnectBtn {
+      background: none; border: none; color: #1a73e8;
+      font-size: .85rem; font-weight: 500; cursor: pointer;
+      display: inline-flex; align-items: center; gap: .3rem;
+      opacity: .85; transition: opacity .15s; white-space: nowrap;
+    }
+    #gpConnectBtn:hover { opacity: 1; text-decoration: underline; }
+    .gp-img {
+      width: 100%; aspect-ratio: 1; object-fit: cover;
+      display: block; background: var(--border);
+    }
+    .gp-body { padding: .5rem .75rem; }
+    .gp-album { font-size: .72rem; font-weight: 600; color: #1a73e8; margin-bottom: .15rem; }
+    .gp-desc {
+      font-size: .78rem; color: var(--muted); line-height: 1.4;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .gp-footer {
+      display: flex; align-items: center;
+      padding: .35rem .75rem; border-top: 1px solid var(--border);
+      font-size: .72rem; color: var(--muted);
+    }
+
     /* ── Per-card followee badge ── */
     .ig-followee-badge {
       display: inline-flex; align-items: center; gap: .2rem;
@@ -447,6 +473,8 @@
           <label for="ig-username">👥</label>
           <input id="ig-username" type="text" placeholder="Your Instagram username (optional)" autocomplete="username" />
         </div>
+        <span class="search-sub-sep">·</span>
+        <button id="gpConnectBtn" type="button">📷 Connect Google Photos</button>
       </div>
     </div>
     <button id="searchBtn" type="submit">Search</button>
@@ -484,6 +512,17 @@
         <button class="mob-tab active" data-tab="eat"   onclick="selectMobTab('eat')">🍽️ Eat</button>
         <button class="mob-tab"       data-tab="do"    onclick="selectMobTab('do')">🎭 Do</button>
         <button class="mob-tab"       data-tab="sleep" onclick="selectMobTab('sleep')">🛏️ Sleep</button>
+      </div>
+
+      <!-- Google Photos strip (full-width, shown only when connected) -->
+      <div id="col-gp" hidden style="margin-bottom:1.5rem">
+        <div class="section-header">
+          <span style="font-size:1.4rem">📷</span><h2>Your Google Photos</h2>
+        </div>
+        <div class="source-block">
+          <div class="source-label"><span class="source-pill pill-gp">Google Photos</span></div>
+          <div class="cards" id="gp-cards" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))"></div>
+        </div>
       </div>
 
       <!-- Places + Instagram grid -->
@@ -577,6 +616,99 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   const PREVIEW = 4;
+
+  /* ── Google Photos token management ── */
+  const GP_LS_KEY = 'gp_tokens';
+  function gpGetTokens() { try { return JSON.parse(localStorage.getItem(GP_LS_KEY)); } catch { return null; } }
+  function gpSetTokens(t) { localStorage.setItem(GP_LS_KEY, JSON.stringify(t)); }
+  function gpClearTokens() { localStorage.removeItem(GP_LS_KEY); }
+
+  async function gpGetValidToken() {
+    const t = gpGetTokens();
+    if (!t) return null;
+    // Still valid (60 s buffer)
+    if (t.expires_at - 60 > Date.now() / 1000) return t.access_token;
+    // Try refresh
+    if (!t.refresh_token) { gpClearTokens(); return null; }
+    try {
+      const r = await fetch('/auth/google/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: t.refresh_token }),
+      });
+      if (!r.ok) { gpClearTokens(); return null; }
+      const data = await r.json();
+      gpSetTokens({ ...t, access_token: data.access_token, expires_at: data.expires_at });
+      return data.access_token;
+    } catch { return null; }
+  }
+
+  function updateGpButton() {
+    const btn = document.getElementById('gpConnectBtn');
+    if (!btn) return;
+    if (gpGetTokens()) {
+      btn.textContent = '📷 Photos connected ✓';
+      btn.title = 'Click to disconnect';
+    } else {
+      btn.textContent = '📷 Connect Google Photos';
+      btn.title = '';
+    }
+  }
+
+  // Handle OAuth callback: token arrives in URL hash
+  (function () {
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      const p = new URLSearchParams(hash);
+      if (p.get('access_token')) {
+        gpSetTokens({
+          access_token:  p.get('access_token'),
+          refresh_token: p.get('refresh_token') || '',
+          expires_at:    parseInt(p.get('expires_at') || '0', 10),
+        });
+        history.replaceState(null, '', window.location.pathname);
+      }
+    }
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('gp_error')) {
+      alert('Google Photos error: ' + sp.get('gp_error'));
+      history.replaceState(null, '', window.location.pathname);
+    }
+    updateGpButton();
+  })();
+
+  document.getElementById('gpConnectBtn').addEventListener('click', () => {
+    if (gpGetTokens()) {
+      gpClearTokens();
+      updateGpButton();
+      document.getElementById('col-gp').hidden = true;
+    } else {
+      window.location.href = '/auth/google/start';
+    }
+  });
+
+  /* ── Google Photos renderer ── */
+  function renderGooglePhotos(photos) {
+    const el = document.getElementById('gp-cards');
+    if (!photos.length) {
+      el.innerHTML = '<div class="empty">No photos found for this location</div>';
+      return;
+    }
+    el.innerHTML = photos.map(p => {
+      const year = p.timestamp ? (p.timestamp.slice(0, 4) || '') : '';
+      return `
+        <a class="card" href="${esc(p.product_url || p.url)}" target="_blank" rel="noopener"
+           style="text-decoration:none;color:inherit">
+          <img class="gp-img" src="${esc(p.url)}" loading="lazy" onerror="this.style.display='none'">
+          <div class="gp-body">
+            ${p.album_title ? `<div class="gp-album">📁 ${esc(p.album_title)}</div>` : ''}
+            ${p.description ? `<div class="gp-desc">${esc(p.description)}</div>` : ''}
+          </div>
+          ${year ? `<div class="gp-footer"><span>${esc(year)}</span></div>` : ''}
+        </a>`;
+    }).join('');
+  }
+
   let _map = null;
   let _markers = [];        // Leaflet marker objects
   let _markerItems = [];    // { marker, el } for sidebar↔map linking
@@ -1059,6 +1191,24 @@
         renderEatInstagram();
         if (document.getElementById('mapView').style.display !== 'none') initMap(_lastData);
       }).catch(() => { _followeePosts = []; renderEatInstagram(); });
+
+      // Phase 4: Google Photos (if connected)
+      gpGetValidToken().then(token => {
+        if (!token) { document.getElementById('col-gp').hidden = true; return; }
+        const gpSection = document.getElementById('col-gp');
+        gpSection.hidden = false;
+        document.getElementById('gp-cards').innerHTML = `
+          <div class="empty" style="padding:1rem">
+            <div class="spinner" style="width:22px;height:22px;border-width:2px;margin-bottom:.5rem"></div>
+            Loading your photos…
+          </div>`;
+        fetch(`/api/photos/google?location=${encodeURIComponent(location)}&access_token=${encodeURIComponent(token)}`)
+          .then(r => r.ok ? r.json() : [])
+          .then(photos => renderGooglePhotos(photos))
+          .catch(() => {
+            document.getElementById('gp-cards').innerHTML = '<div class="empty">Could not load Google Photos</div>';
+          });
+      });
 
     } catch (err) {
       const el = document.getElementById('error');

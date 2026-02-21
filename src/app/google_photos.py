@@ -1,0 +1,162 @@
+import asyncio
+import logging
+import os
+import time
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
+
+import httpx
+
+from .models import GooglePhoto
+
+logger = logging.getLogger(__name__)
+
+_executor = ThreadPoolExecutor(max_workers=2)
+
+_SCOPES = "https://www.googleapis.com/auth/photoslibrary.readonly"
+_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_API_BASE = "https://photoslibrary.googleapis.com/v1"
+
+
+def get_auth_url(redirect_uri: str) -> str:
+    params = {
+        "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": _SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+    return _AUTH_URL + "?" + urllib.parse.urlencode(params)
+
+
+def exchange_code(code: str, redirect_uri: str) -> dict:
+    """Exchange authorization code → access + refresh tokens."""
+    resp = httpx.post(
+        _TOKEN_URL,
+        data={
+            "code": code,
+            "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
+            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", ""),
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "access_token": data["access_token"],
+        "refresh_token": data.get("refresh_token", ""),
+        "expires_at": int(time.time()) + data.get("expires_in", 3600),
+    }
+
+
+def do_refresh(refresh_tok: str) -> dict:
+    """Exchange a refresh token for a new access token."""
+    resp = httpx.post(
+        _TOKEN_URL,
+        data={
+            "refresh_token": refresh_tok,
+            "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
+            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", ""),
+            "grant_type": "refresh_token",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "access_token": data["access_token"],
+        "expires_at": int(time.time()) + data.get("expires_in", 3600),
+    }
+
+
+def _parse_photo(item: dict, album_title: str | None = None) -> GooglePhoto | None:
+    try:
+        meta = item.get("mediaMetadata", {})
+        # Only include photos (not videos)
+        if "photo" not in meta:
+            return None
+        return GooglePhoto(
+            id=item["id"],
+            url=item["baseUrl"] + "=w800",
+            description=item.get("description", ""),
+            timestamp=meta.get("creationTime", ""),
+            album_title=album_title,
+            product_url=item.get("productUrl", ""),
+        )
+    except Exception:
+        return None
+
+
+def _fetch_sync(access_token: str, location: str) -> list[GooglePhoto]:
+    headers = {"Authorization": f"Bearer {access_token}"}
+    location_lower = location.lower()
+    photos: list[GooglePhoto] = []
+
+    # ── Pass 1: look for albums whose title contains the location name ──
+    # Google auto-creates trip albums named after locations, e.g. "Bangkok 2024"
+    try:
+        r = httpx.get(
+            f"{_API_BASE}/albums",
+            headers=headers,
+            params={"pageSize": 50},
+            timeout=15,
+        )
+        r.raise_for_status()
+        albums = r.json().get("albums", [])
+        matching = [a for a in albums if location_lower in a.get("title", "").lower()]
+        logger.info("Google Photos: %d albums, %d match '%s'", len(albums), len(matching), location)
+
+        for album in matching[:3]:
+            r2 = httpx.post(
+                f"{_API_BASE}/mediaItems:search",
+                headers=headers,
+                json={"albumId": album["id"], "pageSize": 25},
+                timeout=15,
+            )
+            r2.raise_for_status()
+            for item in r2.json().get("mediaItems", []):
+                p = _parse_photo(item, album.get("title"))
+                if p:
+                    photos.append(p)
+            if len(photos) >= 12:
+                break
+    except Exception as exc:
+        logger.warning("Google Photos album fetch failed: %s", exc)
+
+    # ── Pass 2: fall back to LANDMARKS / TRAVEL categories ──
+    if not photos:
+        try:
+            r = httpx.post(
+                f"{_API_BASE}/mediaItems:search",
+                headers=headers,
+                json={
+                    "pageSize": 25,
+                    "filters": {
+                        "contentFilter": {
+                            "includedContentCategories": ["LANDMARKS", "CITYSCAPES", "TRAVEL"]
+                        }
+                    },
+                },
+                timeout=15,
+            )
+            r.raise_for_status()
+            for item in r.json().get("mediaItems", []):
+                p = _parse_photo(item)
+                if p:
+                    photos.append(p)
+            logger.info(
+                "Google Photos category fallback for '%s': %d photos", location, len(photos)
+            )
+        except Exception as exc:
+            logger.warning("Google Photos category fetch failed: %s", exc)
+
+    return photos[:12]
+
+
+async def search_google_photos(access_token: str, location: str) -> list[GooglePhoto]:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, _fetch_sync, access_token, location)

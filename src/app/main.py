@@ -1,16 +1,18 @@
 import asyncio
 import logging
 import time
+import urllib.parse
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, RedirectResponse
 
 load_dotenv()
 
+from .google_photos import do_refresh, exchange_code, get_auth_url, search_google_photos  # noqa: E402
 from .instagram import search_followee_posts, search_instagram  # noqa: E402
-from .models import InstagramPost, PlacesResponse, SearchResponse  # noqa: E402
+from .models import GooglePhoto, InstagramPost, PlacesResponse, SearchResponse  # noqa: E402
 from .overpass import _geocode, search_osm  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
@@ -126,6 +128,52 @@ async def search_followees_endpoint(
     if posts:  # don't cache empty — could be a timeout while executor was busy
         _followee_cache[key] = (time.time(), posts)
     return posts
+
+
+# ── Google Photos OAuth ──────────────────────────────────────────────────────
+
+def _redirect_uri(request: Request) -> str:
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/auth/google/callback"
+
+
+@app.get("/auth/google/start")
+def google_auth_start(request: Request):
+    client_id = __import__("os").getenv("GOOGLE_CLIENT_ID", "")
+    if not client_id:
+        raise HTTPException(503, "GOOGLE_CLIENT_ID not configured")
+    return RedirectResponse(get_auth_url(_redirect_uri(request)))
+
+
+@app.get("/auth/google/callback")
+def google_auth_callback(request: Request, code: str = "", error: str = ""):
+    if error or not code:
+        return RedirectResponse(f"/?gp_error={urllib.parse.quote(error or 'cancelled')}")
+    try:
+        tokens = exchange_code(code, _redirect_uri(request))
+        fragment = urllib.parse.urlencode(tokens)
+        return RedirectResponse(f"/?gp_auth=1#{fragment}")
+    except Exception as exc:
+        return RedirectResponse(f"/?gp_error={urllib.parse.quote(str(exc))}")
+
+
+@app.post("/auth/google/refresh")
+async def google_refresh(body: dict):
+    refresh_tok = body.get("refresh_token", "")
+    if not refresh_tok:
+        raise HTTPException(400, "refresh_token required")
+    try:
+        return do_refresh(refresh_tok)
+    except Exception as exc:
+        raise HTTPException(401, str(exc))
+
+
+@app.get("/api/photos/google", response_model=list[GooglePhoto])
+async def google_photos_endpoint(
+    location: str = Query(..., min_length=2),
+    access_token: str = Query(...),
+) -> list[GooglePhoto]:
+    return await search_google_photos(access_token, location)
 
 
 # Legacy endpoint — kept for backwards compat
