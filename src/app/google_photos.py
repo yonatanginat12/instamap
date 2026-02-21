@@ -155,32 +155,38 @@ def _fetch_sync(access_token: str, location: str) -> list[GooglePhoto]:
         if len(photos) >= 12:
             break
 
-    # ── Pass 2: fall back to LANDMARKS / TRAVEL categories ──
+    # ── Pass 2: fall back to content categories (not location-specific) ──
     if not photos:
-        try:
-            r = httpx.post(
-                f"{_API_BASE}/mediaItems:search",
-                headers=headers,
-                json={
-                    "pageSize": 50,
-                    "filters": {
-                        "contentFilter": {
-                            "includedContentCategories": ["LANDMARKS", "CITYSCAPES", "TRAVEL"]
-                        }
+        for categories in (
+            ["LANDMARKS", "CITYSCAPES"],
+            ["TRAVEL"],
+            ["LANDSCAPES", "ARCHITECTURE"],
+        ):
+            try:
+                r = httpx.post(
+                    f"{_API_BASE}/mediaItems:search",
+                    headers=headers,
+                    json={
+                        "pageSize": 50,
+                        "filters": {
+                            "contentFilter": {"includedContentCategories": categories},
+                            "includeArchivedMedia": True,
+                        },
                     },
-                },
-                timeout=15,
-            )
-            r.raise_for_status()
-            for item in r.json().get("mediaItems", []):
-                p = _parse_photo(item)
-                if p:
-                    photos.append(p)
-            logger.info(
-                "Google Photos category fallback for '%s': %d photos", location, len(photos)
-            )
-        except Exception as exc:
-            logger.warning("Google Photos category fetch failed: %s", exc)
+                    timeout=15,
+                )
+                r.raise_for_status()
+                for item in r.json().get("mediaItems", []):
+                    p = _parse_photo(item)
+                    if p:
+                        photos.append(p)
+                logger.info(
+                    "Google Photos category %s for '%s': %d photos", categories, location, len(photos)
+                )
+                if photos:
+                    break
+            except Exception as exc:
+                logger.warning("Google Photos category %s fetch failed: %s", categories, exc)
 
     return photos[:12]
 
